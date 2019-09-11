@@ -995,7 +995,7 @@ static u32 read_clusters(ntfs_volume *vol, const runlist_element *rl,
 		}
 		if ((to_read - got) < count)
 			count = to_read - got;
-		xgot = ntfs_pread(vol->dev, xpos, count, xinbuf);
+		xgot = ntfs_pread(vol->sb, xpos, count, xinbuf);
 		if (xgot == (int)count) {
 			got += count;
 			xpos += count;

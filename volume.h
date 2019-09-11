@@ -41,6 +41,8 @@
 #include <mntent.h>
 #endif
 
+#include <linux/fs.h>
+
 /* Forward declaration */
 typedef struct _ntfs_volume ntfs_volume;
 
@@ -281,10 +283,10 @@ extern const char *ntfs_home;
 
 extern ntfs_volume *ntfs_volume_alloc(void);
 
-extern ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
+extern ntfs_volume *ntfs_volume_startup(struct super_block *sb,
 		ntfs_mount_flags flags);
 
-extern ntfs_volume *ntfs_device_mount(struct ntfs_device *dev,
+extern ntfs_volume *ntfs_device_mount(struct super_block *sb,
 		ntfs_mount_flags flags);
 
 //extern ntfs_volume *ntfs_mount(const char *name, ntfs_mount_flags flags);

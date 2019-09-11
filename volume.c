@@ -203,19 +203,11 @@ static int __ntfs_volume_release(ntfs_volume *v)
 	if (ntfs_inode_free(&v->mftmirr_ni))
 		ntfs_error_set(&err);
 	
-	if (v->dev) {
-		struct ntfs_device *dev = v->dev;
-
-		if (dev->d_ops->sync(dev))
-			ntfs_error_set(&err);
-		if (dev->d_ops->close(dev))
-			ntfs_error_set(&err);
-	}
-
 	ntfs_free_lru_caches(v);
 	free(v->vol_name);
 	free(v->upcase);
-	if (v->locase) free(v->locase);
+	if (v->locase)
+		free(v->locase);
 	free(v->attrdef);
 	free(v);
 
@@ -477,7 +469,7 @@ error_exit:
  * Return the allocated volume structure on success and NULL on error with
  * errno set to the error code.
  */
-ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
+ntfs_volume *ntfs_volume_startup(struct super_block *sb,
 		ntfs_mount_flags flags)
 {
 	LCN mft_zone_size, mft_lcn;
@@ -485,12 +477,6 @@ ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
 	ntfs_volume *vol;
 	NTFS_BOOT_SECTOR *bs;
 	int eo;
-
-	if (!dev || !dev->d_ops || !dev->d_name) {
-		errno = EINVAL;
-		ntfs_log_perror("%s: dev = %p", __FUNCTION__, dev);
-		return NULL;
-	}
 
 	bs = ntfs_malloc(sizeof(NTFS_BOOT_SECTOR));
 	if (!bs)
@@ -523,6 +509,7 @@ ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
 	if (flags & NTFS_MNT_RDONLY)
 		NVolSetReadOnly(vol);
 	
+#if 0
 	/* ...->open needs bracketing to compile with glibc 2.7 */
 	if ((dev->d_ops->open)(dev, NVolReadOnly(vol) ? O_RDONLY: O_RDWR)) {
 		if (!NVolReadOnly(vol) && (errno == EROFS)) {
@@ -540,36 +527,34 @@ ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
 			goto error_exit;
 		}
 	}
+#endif
 	/* Attach the device to the volume. */
-	vol->dev = dev;
+	vol->sb = sb;
 	
 	/* Now read the bootsector. */
-	br = ntfs_pread(dev, 0, sizeof(NTFS_BOOT_SECTOR), bs);
+	br = ntfs_pread(sb, 0, sizeof(NTFS_BOOT_SECTOR), bs);
 	if (br != sizeof(NTFS_BOOT_SECTOR)) {
-		if (br != -1)
-			errno = EINVAL;
 		if (!br)
 			ntfs_log_error("Failed to read bootsector (size=0)\n");
 		else
 			ntfs_log_perror("Error reading bootsector");
 		goto error_exit;
 	}
-	if (!ntfs_boot_sector_is_ntfs(bs)) {
-		errno = EINVAL;
+	if (!ntfs_boot_sector_is_ntfs(bs))
 		goto error_exit;
-	}
+
 	if (ntfs_boot_sector_parse(vol, bs) < 0)
 		goto error_exit;
 	
 	free(bs);
 	bs = NULL;
 	/* Now set the device block size to the sector size. */
-	if (ntfs_device_block_size_set(vol->dev, vol->sector_size))
-		ntfs_log_debug("Failed to set the device block size to the "
-				"sector size.  This may affect performance "
-				"but should be harmless otherwise.  Error: "
-				"\n");
-	
+//	if (ntfs_device_block_size_set(vol->dev, vol->sector_size))
+//		ntfs_log_debug("Failed to set the device block size to the "
+//				"sector size.  This may affect performance "
+//				"but should be harmless otherwise.  Error: "
+//				"\n");
+//	
 	/* We now initialize the cluster allocator. */
 	vol->full_zones = 0;
 	mft_zone_size = vol->nr_clusters >> 3;      /* 12.5% */
@@ -636,11 +621,9 @@ ntfs_volume *ntfs_volume_startup(struct ntfs_device *dev,
 	}
 	return vol;
 error_exit:
-	eo = errno;
 	free(bs);
 	if (vol)
 		__ntfs_volume_release(vol);
-	errno = eo;
 	return NULL;
 }
 
@@ -910,7 +893,7 @@ static int fix_txf_data(ntfs_volume *vol)
  * Return the allocated volume structure on success and NULL on error with
  * errno set to the error code.
  */
-ntfs_volume *ntfs_device_mount(struct ntfs_device *dev, ntfs_mount_flags flags)
+ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 {
 	s64 l;
 	ntfs_volume *vol;
@@ -928,7 +911,7 @@ ntfs_volume *ntfs_device_mount(struct ntfs_device *dev, ntfs_mount_flags flags)
 	BOOL need_fallback_ro;
 
 	need_fallback_ro = FALSE;
-	vol = ntfs_volume_startup(dev, flags);
+	vol = ntfs_volume_startup(sb, flags);
 	if (!vol)
 		return NULL;
 

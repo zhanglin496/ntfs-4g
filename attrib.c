@@ -248,7 +248,7 @@ s64 ntfs_get_attribute_value(const ntfs_volume *vol,
 			 * - Yes we can, in sparse files! But not necessarily
 			 * size of 16, just run length.
 			 */
-			r = ntfs_pread(vol->dev, rl[i].lcn <<
+			r = ntfs_pread(vol->sb, rl[i].lcn <<
 					vol->cluster_size_bits, rl[i].length <<
 					vol->cluster_size_bits, intbuf);
 			if (r != rl[i].length << vol->cluster_size_bits) {
@@ -284,7 +284,7 @@ s64 ntfs_get_attribute_value(const ntfs_volume *vol,
 		 * - Yes we can, in sparse files! But not necessarily size of
 		 * 16, just run length.
 		 */
-		r = ntfs_pread(vol->dev, rl[i].lcn << vol->cluster_size_bits,
+		r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
 				rl[i].length << vol->cluster_size_bits,
 				b + total);
 		if (r != rl[i].length << vol->cluster_size_bits) {
@@ -1116,7 +1116,7 @@ retry:
 		ntfs_log_trace("Reading %lld bytes from vcn %lld, lcn %lld, ofs"
 				" %lld.\n", (long long)to_read, (long long)rl->vcn,
 			       (long long )rl->lcn, (long long)ofs);
-		br = ntfs_pread(vol->dev, (rl->lcn << vol->cluster_size_bits) +
+		br = ntfs_pread(vol->sb, (rl->lcn << vol->cluster_size_bits) +
 				ofs, to_read, b);
 		/* If everything ok, update progress counters and continue. */
 		if (br > 0) {
@@ -2777,9 +2777,8 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 		upcase_len = vol->upcase_len;
 	} else {
 		if (name && name != AT_UNNAMED) {
-			errno = EINVAL;
 			ntfs_log_perror("%s", __FUNCTION__);
-			return -1;
+			return -EINVAL;
 		}
 		vol = NULL;
 		upcase = NULL;
@@ -2803,8 +2802,7 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 		if (((type != AT_UNUSED) && (le32_to_cpu(a->type) >
 				le32_to_cpu(type))) ||
 				(a->type == AT_END)) {
-			errno = ENOENT;
-			return -1;
+			return -ENOENT;
 		}
 		if (!a->length)
 			break;
@@ -2821,8 +2819,7 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 		if (name == AT_UNNAMED) {
 			/* The search failed if the found attribute is named. */
 			if (a->name_length) {
-				errno = ENOENT;
-				return -1;
+				return -ENOENT;
 			}
 		} else {
 			register int rc;
@@ -2836,8 +2833,7 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 				 * there is no matching attribute.
 				 */
 				if (rc < 0) {
-					errno = ENOENT;
-					return -1;
+					return -ENOENT;
 				}
 			/* If the strings are not equal, continue search. */
 			continue;
@@ -2867,19 +2863,16 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 				if (val_len == avl)
 					return 0;
 				if (val_len < avl) {
-					errno = ENOENT;
-					return -1;
+					return -ENOENT;
 				}
 			} else if (rc < 0) {
-				errno = ENOENT;
-				return -1;
+				return -ENOENT;
 			}
 		}
 	}
-	errno = EIO;
 	ntfs_log_perror("%s: Corrupt inode (%lld)", __FUNCTION__, 
 			ctx->ntfs_ino ? (long long)ctx->ntfs_ino->mft_no : -1);
-	return -1;
+	return -EIO;
 }
 
 void ntfs_attr_name_free(char **name)
@@ -3382,7 +3375,7 @@ int ntfs_attr_lookup(const ATTR_TYPES type, const ntfschar *name,
 	if (!ctx || !ctx->mrec || !ctx->attr || (name && name != AT_UNNAMED &&
 			(!ctx->ntfs_ino || !(vol = ctx->ntfs_ino->vol) ||
 			!vol->upcase || !vol->upcase_len))) {
-		errno = EINVAL;
+		ret = -EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
 		goto out;
 	}
@@ -3397,7 +3390,7 @@ int ntfs_attr_lookup(const ATTR_TYPES type, const ntfschar *name,
 		ret = ntfs_external_attr_find(type, name, name_len, ic, 
 					      lowest_vcn, val, val_len, ctx);
 out:
-	ntfs_log_leave("\n");
+	ntfs_log_leave("ret %d\n", ret);
 	return ret;
 }
 

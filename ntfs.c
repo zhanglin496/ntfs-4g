@@ -15,11 +15,20 @@
 #include <linux/quotaops.h>
 #include <linux/uaccess.h>
 #include <linux/dax.h>
-#include <linux/iversion.h>
+//#include <linux/iversion.h>
+#include <linux/version.h>
 
 #include "logging.h"
 #include "layout.h"
 #include "bootsect.h"
+
+static void print_hex(void *data, int len)
+{
+	int i = 0;
+	for (i = 0; i < len; i++)
+		printk("%02hhx", ((char *)data)[i]);
+	printk("\n");
+}
 
 static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 {
@@ -28,28 +37,25 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	ntfs_volume *vol;
 	int ret = -ENOMEM;
 
-	bh = __getblk(sb->s_bdev, secno, count);
-	if (bh)
-			goto no_bh;
-
-	vol = ntfs_volume_alloc();
-	if (!vol)
-		goto error_exit;
-
 	if (!(bh = sb_bread(sb, 0))) {
 		goto error_exit;
 	}
 	if (bh->b_size < sizeof(*bs))
 		goto error_exit;
 
+	sb_set_blocksize(sb, NTFS_BLOCK_SIZE);
 	bs = (void *)bh->b_data;
-	ntfs_log_debug("");
+	print_hex(bs, 1024);
+	brelse(bh);
 
-	if (!ntfs_boot_sector_is_ntfs(bs))
+	if (!(bh = sb_bread(sb, 1)))
 		goto error_exit;
-	if (ntfs_boot_sector_parse(vol, bs) < 0)
-		goto error_exit;
+	bs = (void *)bh->b_data;
+	print_hex(bs, 512);
 
+	vol = ntfs_volume_startup(sb, 0);
+	if (!vol)
+		goto error_exit;
 
 error_exit:
 	kfree(vol);

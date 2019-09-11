@@ -119,8 +119,11 @@ extern struct ntfs_device *ntfs_device_alloc(const char *name, const long state,
 extern int ntfs_device_free(struct ntfs_device *dev);
 extern int ntfs_device_sync(struct ntfs_device *dev);
 
-extern s64 ntfs_pread(struct ntfs_device *dev, const s64 pos, s64 count,
+//extern s64 ntfs_pread(struct ntfs_device *dev, const s64 pos, s64 count,
+//		void *b);
+extern s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count,
 		void *b);
+
 extern s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		const void *b);
 

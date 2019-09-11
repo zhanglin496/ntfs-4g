@@ -1141,7 +1141,7 @@ s64 ntfs_rl_pread(const ntfs_volume *vol, const runlist_element *rl,
 		to_read = min(count, (rl->length << vol->cluster_size_bits) -
 				ofs);
 retry:
-		bytes_read = ntfs_pread(vol->dev, (rl->lcn <<
+		bytes_read = ntfs_pread(vol->sb, (rl->lcn <<
 				vol->cluster_size_bits) + ofs, to_read, b);
 		/* If everything ok, update progress counters and continue. */
 		if (bytes_read > 0) {

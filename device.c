@@ -72,6 +72,8 @@
 #include <hd.h>
 #endif
 
+#include <linux/buffer_head.h>
+
 #include "types.h"
 #include "mst.h"
 #include "debug.h"
@@ -79,8 +81,8 @@
 #include "logging.h"
 #include "misc.h"
 
+
 static int errno;
-#define linux
 #define strdup(x) kstrdup(x, GFP_KERNEL)
 
 #if defined(linux) && defined(_IO) && !defined(BLKGETSIZE)
@@ -208,6 +210,7 @@ int ntfs_device_sync(struct ntfs_device *dev)
  * to the return code of either seek, read, or set to EINVAL in case of
  * invalid arguments.
  */
+#if 0
 s64 ntfs_pread(struct ntfs_device *dev, const s64 pos, s64 count, void *b)
 {
 	s64 br, total;
@@ -235,6 +238,38 @@ s64 ntfs_pread(struct ntfs_device *dev, const s64 pos, s64 count, void *b)
 		/* Nothing read and error, return error status. */
 		return br;
 	}
+	/* Finally, return the number of bytes read. */
+	return total;
+}
+#endif
+
+s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
+{
+	s64 br, total;
+	struct buffer_head *bh;
+	sector_t sector;
+
+	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
+
+	if (!b || count < 0 || pos < 0)
+		return -1;
+	if (!count)
+		return 0;
+//	sector = round_down(pos, NTFS_SECTOR_SIZE);
+	sector = pos / NTFS_BLOCK_SIZE;
+	for (total = 0; count; count -= br, total += br) {
+		ntfs_log_trace("read sector %lld\n", sector);
+		bh = sb_bread(sb, sector);
+		if (!bh)
+			break;
+		br = bh->b_size;
+		sector += br / NTFS_BLOCK_SIZE;
+		if (br > count)
+			br = count;
+		memcpy(b + total, bh->b_data, br);
+		brelse(bh);
+	}
+	ntfs_log_trace("ntfs_pread %lld bytes\n", total);
 	/* Finally, return the number of bytes read. */
 	return total;
 }
@@ -342,7 +377,7 @@ s64 ntfs_mst_pread(struct ntfs_device *dev, const s64 pos, s64 count,
 		return -1;
 	}
 	/* Do the read. */
-	br = ntfs_pread(dev, pos, count * bksize, b);
+	br = ntfs_pread((void *)dev, pos, count * bksize, b);
 	if (br < 0)
 		return br;
 	/*
@@ -452,7 +487,7 @@ s64 ntfs_cluster_read(const ntfs_volume *vol, const s64 lcn, const s64 count,
 			        (long long)lcn + count);
 		return -1;
 	}
-	br = ntfs_pread(vol->dev, lcn << vol->cluster_size_bits,
+	br = ntfs_pread(vol->sb, lcn << vol->cluster_size_bits,
 			count << vol->cluster_size_bits, b);
 	if (br < 0) {
 		ntfs_log_perror("Error reading cluster(s)");
