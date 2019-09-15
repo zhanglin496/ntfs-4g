@@ -3037,9 +3037,8 @@ find_attr_list_attr:
 
 			/* Check for bogus calls. */
 			if (name || name_len || val || val_len || lowest_vcn) {
-				errno = EINVAL;
 				ntfs_log_perror("%s", __FUNCTION__);
-				return -1;
+				return -EINVAL;
 			}
 
 			/* We want the base record. */
@@ -3066,13 +3065,12 @@ find_attr_list_attr:
 				return 0;
 
 			/* Error! If other than not found return it. */
-			if (errno != ENOENT)
+			if (rc != -ENOENT)
 				return rc;
 
 			/* Not found?!? Absurd! */
-			errno = EIO;
 			ntfs_log_error("Attribute list wasn't found");
-			return -1;
+			return -EIO;
 		}
 	}
 	for (;; al_entry = next_al_entry) {
@@ -3240,9 +3238,8 @@ do_next_attr:
 		ctx->mrec = ctx->base_mrec;
 		ctx->attr = ctx->base_attr;
 	}
-	errno = EIO;
 	ntfs_log_perror("Inode is corrupt (%lld)", (long long)base_ni->mft_no);
-	return -1;
+	return -EIO;
 not_found:
 	/*
 	 * If we were looking for AT_END or we were enumerating and reached the
@@ -3667,9 +3664,8 @@ static int ntfs_attr_can_be_non_resident(const ntfs_volume *vol, const ATTR_TYPE
 		allowed = !(ad->flags & ATTR_DEF_RESIDENT);
 	}
 	if (!allowed) {
-		errno = EPERM;
 		ntfs_log_trace("Attribute can't be non-resident\n");
-		return -1;
+		return -EPERM;
 	}
 	return 0;
 }
@@ -3736,14 +3732,12 @@ int ntfs_make_room_for_attr(MFT_RECORD *m, u8 *pos, u32 size)
 
 	/* Rigorous consistency checks. */
 	if (!m || !pos || pos < (u8*)m) {
-		errno = EINVAL;
 		ntfs_log_perror("%s: pos=%p  m=%p", __FUNCTION__, pos, m);
-		return -1;
+		return -EINVAL;
 	}
 	/* The -8 is for the attribute terminator. */
 	if (pos - (u8*)m > (int)le32_to_cpu(m->bytes_in_use) - 8) {
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 	/* Nothing to do. */
 	if (!size)
@@ -3753,9 +3747,8 @@ int ntfs_make_room_for_attr(MFT_RECORD *m, u8 *pos, u32 size)
 	/* Do we have enough space? */
 	if (biu + size > le32_to_cpu(m->bytes_allocated) ||
 	    pos + size > (u8*)m + le32_to_cpu(m->bytes_allocated)) {
-		errno = ENOSPC;
 		ntfs_log_trace("No enough space in the MFT record\n");
-		return -1;
+		return -ENOSPC;
 	}
 	/* Move everything after pos to pos + size. */
 	memmove(pos + size, pos, biu - (pos - (u8*)m));
@@ -3796,8 +3789,7 @@ int ntfs_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 		(long long) ni->mft_no, (unsigned) le32_to_cpu(type), (unsigned) le16_to_cpu(data_flags));
 
 	if (!ni || (!name && name_len)) {
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	if (ntfs_attr_can_be_resident(ni->vol, type)) {
@@ -3819,12 +3811,12 @@ int ntfs_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	 */
 	if (!ntfs_attr_find(type, name, name_len, CASE_SENSITIVE, val, size,
 			ctx)) {
-		err = EEXIST;
+		err = -EEXIST;
 		ntfs_log_trace("Attribute already present.\n");
 		goto put_err_out;
 	}
 	if (errno != ENOENT) {
-		err = EIO;
+		err = -EIO;
 		goto put_err_out;
 	}
 	a = ctx->attr;
@@ -3834,8 +3826,7 @@ int ntfs_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	length = offsetof(ATTR_RECORD, resident_end) +
 				((name_len * sizeof(ntfschar) + 7) & ~7) +
 				((size + 7) & ~7);
-	if (ntfs_make_room_for_attr(ctx->mrec, (u8*) ctx->attr, length)) {
-		err = errno;
+	if ((err = ntfs_make_room_for_attr(ctx->mrec, (u8*) ctx->attr, length))) {
 		ntfs_log_trace("Failed to make room for attribute.\n");
 		goto put_err_out;
 	}
@@ -3891,8 +3882,8 @@ int ntfs_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	return offset;
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
-	errno = err;
-	return -1;
+//	errno = err;
+	return err;
 }
 
 /**
@@ -3930,16 +3921,15 @@ int ntfs_non_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 			(long long) lowest_vcn, dataruns_size, (unsigned) le16_to_cpu(flags));
 
 	if (!ni || dataruns_size <= 0 || (!name && name_len)) {
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
-	if (ntfs_attr_can_be_non_resident(ni->vol, type, name, name_len)) {
-		if (errno == EPERM)
+	if ((err = ntfs_attr_can_be_non_resident(ni->vol, type, name, name_len))) {
+		if (err == -EPERM)
 			ntfs_log_perror("Attribute can't be non resident");
 		else
 			ntfs_log_perror("ntfs_attr_can_be_non_resident failed");
-		return -1;
+		return err;
 	}
 
 	/* Locate place where record should be. */
@@ -3953,13 +3943,13 @@ int ntfs_non_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	 */
 	if (!ntfs_attr_find(type, name, name_len, CASE_SENSITIVE, NULL, 0,
 			ctx)) {
-		err = EEXIST;
+		err = -EEXIST;
 		ntfs_log_perror("Attribute 0x%x already present", le32_to_cpu(type));
 		goto put_err_out;
 	}
 	if (errno != ENOENT) {
 		ntfs_log_perror("ntfs_attr_find failed");
-		err = EIO;
+		err = -EIO;
 		goto put_err_out;
 	}
 	a = ctx->attr;
@@ -3971,8 +3961,7 @@ int ntfs_non_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 			name_len + 7) & ~7) + dataruns_size +
 			((flags & (ATTR_IS_COMPRESSED | ATTR_IS_SPARSE)) ?
 			sizeof(a->compressed_size) : 0);
-	if (ntfs_make_room_for_attr(ctx->mrec, (u8*) ctx->attr, length)) {
-		err = errno;
+	if ((err = ntfs_make_room_for_attr(ctx->mrec, (u8*) ctx->attr, length))) {
 		ntfs_log_perror("Failed to make room for attribute");
 		goto put_err_out;
 	}
@@ -4036,8 +4025,7 @@ int ntfs_non_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	return offset;
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
-	errno = err;
-	return -1;
+	return err;
 }
 
 /**
@@ -4208,10 +4196,9 @@ int ntfs_attr_add(ntfs_inode *ni, ATTR_TYPES type,
 	ATTR_FLAGS data_flags;
 
 	if (!ni || size < 0 || type == AT_ATTRIBUTE_LIST) {
-		errno = EINVAL;
 		ntfs_log_perror("%s: ni=%p  size=%lld", __FUNCTION__, ni,
 				(long long)size);
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for inode %lld, attr %x, size %lld.\n",
@@ -4228,23 +4215,20 @@ int ntfs_attr_add(ntfs_inode *ni, ATTR_TYPES type,
 	}
 
 	/* Sanity checks for always resident attributes. */
-	if (ntfs_attr_can_be_non_resident(ni->vol, type, name, name_len)) {
-		if (errno != EPERM) {
-			err = errno;
+	if ((err = ntfs_attr_can_be_non_resident(ni->vol, type, name, name_len))) {
+		if (err != -EPERM) {
 			ntfs_log_perror("ntfs_attr_can_be_non_resident failed");
 			goto err_out;
 		}
 		/* @val is mandatory. */
 		if (!val) {
-			errno = EINVAL;
 			ntfs_log_perror("val is mandatory for always resident "
 					"attributes");
-			return -1;
+			return -EINVAL;
 		}
 		if (size > ni->vol->mft_record_size) {
-			errno = ERANGE;
 			ntfs_log_perror("Attribute is too big");
-			return -1;
+			return -ERANGE;
 		}
 	} else
 		can_be_non_resident = TRUE;
@@ -4384,8 +4368,7 @@ free_err_out:
 		if (ntfs_mft_record_free(attr_ni->vol, attr_ni))
 			ntfs_log_perror("Failed to free MFT record");
 err_out:
-	errno = err;
-	return -1;
+	return err;
 }
 
 /*
@@ -4428,12 +4411,12 @@ int ntfs_attr_set_flags(ntfs_inode *ni, ATTR_TYPES type, const ntfschar *name,
 int ntfs_attr_rm(ntfs_attr *na)
 {
 	ntfs_attr_search_ctx *ctx;
+	int err;
 	int ret = 0;
 
 	if (!na) {
 		ntfs_log_trace("Invalid arguments passed.\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for inode 0x%llx, attr 0x%x.\n",
@@ -4454,8 +4437,8 @@ int ntfs_attr_rm(ntfs_attr *na)
 	ctx = ntfs_attr_get_search_ctx(na->ni, NULL);
 	if (!ctx)
 		return -1;
-	while (!ntfs_attr_lookup(na->type, na->name, na->name_len,
-				CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+	while (!(err = ntfs_attr_lookup(na->type, na->name, na->name_len,
+				CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 		if (ntfs_attr_record_rm(ctx)) {
 			ntfs_log_trace("Failed to remove attribute extent. Leaving "
 					"inconstant metadata.\n");
@@ -4464,7 +4447,7 @@ int ntfs_attr_rm(ntfs_attr *na)
 		ntfs_attr_reinit_search_ctx(ctx);
 	}
 	ntfs_attr_put_search_ctx(ctx);
-	if (errno != ENOENT) {
+	if (err != -ENOENT) {
 		ntfs_log_trace("Attribute lookup failed. Probably leaving inconstant "
 				"metadata.\n");
 		ret = -1;
@@ -4596,8 +4579,7 @@ int ntfs_attr_record_move_to(ntfs_attr_search_ctx *ctx, ntfs_inode *ni)
 
 	if (!ctx || !ctx->attr || !ctx->ntfs_ino || !ni) {
 		ntfs_log_trace("Invalid arguments passed.\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for ctx->attr->type 0x%x, ctx->ntfs_ino->mft_no "
@@ -4612,8 +4594,7 @@ int ntfs_attr_record_move_to(ntfs_attr_search_ctx *ctx, ntfs_inode *ni)
 	if (!ctx->al_entry) {
 		ntfs_log_trace("Inode should contain attribute list to use this "
 				"function.\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	/* Find place in MFT record where attribute will be moved. */
@@ -4627,24 +4608,22 @@ int ntfs_attr_record_move_to(ntfs_attr_search_ctx *ctx, ntfs_inode *ni)
 	 * attribute in @ni->mrec, not any extent inode in case if @ni is base
 	 * file record.
 	 */
-	if (!ntfs_attr_find(a->type, (ntfschar*)((u8*)a + le16_to_cpu(
+	if (!(err = ntfs_attr_find(a->type, (ntfschar*)((u8*)a + le16_to_cpu(
 			a->name_offset)), a->name_length, CASE_SENSITIVE, NULL,
-			0, nctx)) {
+			0, nctx))) {
 		ntfs_log_trace("Attribute of such type, with same name already "
 				"present in this MFT record.\n");
-		err = EEXIST;
+		err = -EEXIST;
 		goto put_err_out;
 	}
-	if (errno != ENOENT) {
-		err = errno;
+	if (err != -ENOENT) {
 		ntfs_log_debug("Attribute lookup failed.\n");
 		goto put_err_out;
 	}
 
 	/* Make space and move attribute. */
-	if (ntfs_make_room_for_attr(ni->mrec, (u8*) nctx->attr,
-					le32_to_cpu(a->length))) {
-		err = errno;
+	if ((err = ntfs_make_room_for_attr(ni->mrec, (u8*) nctx->attr,
+					le32_to_cpu(a->length)))) {
 		ntfs_log_trace("Couldn't make space for attribute.\n");
 		goto put_err_out;
 	}
@@ -4666,8 +4645,7 @@ int ntfs_attr_record_move_to(ntfs_attr_search_ctx *ctx, ntfs_inode *ni)
 	return 0;
 put_err_out:
 	ntfs_attr_put_search_ctx(nctx);
-	errno = err;
-	return -1;
+	return err;
 }
 
 /**
@@ -4690,10 +4668,9 @@ int ntfs_attr_record_move_away(ntfs_attr_search_ctx *ctx, int extra)
 	int i;
 
 	if (!ctx || !ctx->attr || !ctx->ntfs_ino || extra < 0) {
-		errno = EINVAL;
 		ntfs_log_perror("%s: ctx=%p ctx->attr=%p extra=%d", __FUNCTION__,
 				ctx, ctx ? ctx->attr : NULL, extra);
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for attr 0x%x, inode %llu\n",
@@ -4706,10 +4683,9 @@ int ntfs_attr_record_move_away(ntfs_attr_search_ctx *ctx, int extra)
 		base_ni = ctx->ntfs_ino;
 
 	if (!NInoAttrList(base_ni)) {
-		errno = EINVAL;
 		ntfs_log_perror("Inode %llu has no attrlist", 
 				(unsigned long long)base_ni->mft_no);
-		return -1;
+		return -EINVAL;
 	}
 
 	if (ntfs_inode_attach_all_extents(ctx->ntfs_ino)) {
@@ -4791,8 +4767,7 @@ int ntfs_attr_make_non_resident(ntfs_attr *na,
 	if (NAttrNonResident(na)) {
 		ntfs_log_trace("Eeek!  Trying to make non-resident attribute "
 				"non-resident.  Aborting...\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	/* Check that the attribute is allowed to be non-resident. */
@@ -4849,7 +4824,7 @@ int ntfs_attr_make_non_resident(ntfs_attr *na,
 					"(bw = %lli, errno = %i).  "
 					"Aborting...\n", (long long)bw, err);
 			if (bw >= 0)
-				err = EIO;
+				err = -EIO;
 			goto cluster_free_err_out;
 		}
 	}
@@ -4945,8 +4920,7 @@ cluster_free_err_out:
 	na->allocated_size = na->data_size;
 	na->rl = NULL;
 	free(rl);
-	errno = err;
-	return -1;
+	return err;
 }
 
 

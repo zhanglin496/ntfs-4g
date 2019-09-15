@@ -163,11 +163,11 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	ntfs_attr_search_ctx *ctx;
 	STANDARD_INFORMATION *std_info;
 	le32 lthle;
-	int olderrno;
+	int err;
 
 	ntfs_log_enter("Entering for inode %lld\n", (long long)MREF(mref));
 	if (!vol) {
-		errno = EINVAL;
+		err = -EINVAL;
 		goto out;
 	}
 	ni = __ntfs_inode_allocate(vol);
@@ -176,7 +176,7 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
 		goto err_out;
 	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
-		errno = ENOENT;
+		err = -ENOENT;
 		goto err_out;
 	}
 	ni->mft_no = MREF(mref);
@@ -213,14 +213,12 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 		ni->security_id = const_cpu_to_le32(0);
 	}
 	/* Set attribute list information. */
-	olderrno = errno;
-	if (ntfs_attr_lookup(AT_ATTRIBUTE_LIST, AT_UNNAMED, 0,
-			CASE_SENSITIVE, 0, NULL, 0, ctx)) {
-		if (errno != ENOENT)
+	if ((err = ntfs_attr_lookup(AT_ATTRIBUTE_LIST, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx))) {
+		if (err != -ENOENT)
 			goto put_err_out;
 		/* Attribute list attribute does not present. */
 		/* restore previous errno to avoid misinterpretation */
-		errno = olderrno;
 		goto get_size;
 	}
 	NInoSetAttrList(ni);
@@ -228,7 +226,7 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	if (!l)
 		goto put_err_out;
 	if (l > 0x40000) {
-		errno = EIO;
+		err = -EIO;
 		ntfs_log_perror("Too large attrlist attribute (%lld), inode "
 				"%lld", (long long)l, (long long)MREF(mref));
 		goto put_err_out;
@@ -241,20 +239,18 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	if (!l)
 		goto put_err_out;
 	if (l != ni->attr_list_size) {
-		errno = EIO;
+		err = -EIO;
 		ntfs_log_perror("Unexpected attrlist size (%lld <> %u), inode "
 				"%lld", (long long)l, ni->attr_list_size, 
 				(long long)MREF(mref));
 		goto put_err_out;
 	}
 get_size:
-	olderrno = errno;
-	if (ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx)) {
-		if (errno != ENOENT)
+	if ((err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx))) {
+		if (err != -ENOENT)
 			goto put_err_out;
 		/* Directory or special file. */
 		/* restore previous errno to avoid misinterpretation */
-		errno = olderrno;
 		ni->data_size = ni->allocated_size = 0;
 	} else {
 		if (ctx->attr->non_resident) {
