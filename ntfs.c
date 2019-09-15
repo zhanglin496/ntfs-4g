@@ -56,6 +56,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	vol = ntfs_volume_startup(sb, 0);
 	if (!vol)
 		goto error_exit;
+	ntfs_log_debug("ntfs_volume_startup success\n");
 
 error_exit:
 	kfree(vol);

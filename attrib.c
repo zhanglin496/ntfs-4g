@@ -2598,9 +2598,8 @@ s64 ntfs_attr_mst_pread(ntfs_attr *na, const s64 pos, const s64 bk_cnt,
 			(unsigned long long)na->ni->mft_no, le32_to_cpu(na->type),
 			(long long)pos);
 	if (bk_cnt < 0 || bk_size % NTFS_BLOCK_SIZE) {
-		errno = EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
-		return -1;
+		return -EINVAL;
 	}
 	br = ntfs_attr_pread(na, pos, bk_cnt * bk_size, dst);
 	if (br <= 0)

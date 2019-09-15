@@ -255,7 +255,6 @@ s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
 		return -1;
 	if (!count)
 		return 0;
-//	sector = round_down(pos, NTFS_SECTOR_SIZE);
 	sector = pos / NTFS_BLOCK_SIZE;
 	for (total = 0; count; count -= br, total += br) {
 		ntfs_log_trace("read sector %lld\n", sector);
@@ -266,7 +265,7 @@ s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
 		sector += br / NTFS_BLOCK_SIZE;
 		if (br > count)
 			br = count;
-		memcpy(b + total, bh->b_data, br);
+		memcpy(b + total, bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE), br);
 		brelse(bh);
 	}
 	ntfs_log_trace("ntfs_pread %lld bytes\n", total);

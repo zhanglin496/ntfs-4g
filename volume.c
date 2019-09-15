@@ -243,7 +243,7 @@ static int ntfs_mft_load(ntfs_volume *vol)
 	MFT_RECORD *mb = NULL;
 	ntfs_attr_search_ctx *ctx = NULL;
 	ATTR_RECORD *a;
-	int eo;
+	int err = -EINVAL;
 
 	/* Manually setup an ntfs_inode. */
 	vol->mft_ni = ntfs_inode_allocate(vol);
@@ -259,7 +259,7 @@ static int ntfs_mft_load(ntfs_volume *vol)
 			vol->mft_record_size, mb);
 	if (l != 1) {
 		if (l != -1)
-			errno = EIO;
+			err = -EIO;
 		ntfs_log_perror("Error reading $MFT");
 		goto error_exit;
 	}
@@ -272,9 +272,9 @@ static int ntfs_mft_load(ntfs_volume *vol)
 		goto error_exit;
 
 	/* Find the $ATTRIBUTE_LIST attribute in $MFT if present. */
-	if (ntfs_attr_lookup(AT_ATTRIBUTE_LIST, AT_UNNAMED, 0, 0, 0, NULL, 0,
-			ctx)) {
-		if (errno != ENOENT) {
+	if ((err = ntfs_attr_lookup(AT_ATTRIBUTE_LIST, AT_UNNAMED, 0, 0, 0, NULL, 0,
+			ctx))) {
+		if (err != -ENOENT) {
 			ntfs_log_error("$MFT has corrupt attribute list.\n");
 			goto io_error_exit;
 		}
@@ -394,9 +394,8 @@ mft_has_no_attr_list:
 	}
 	return 0;
 io_error_exit:
-	errno = EIO;
+	err = -EIO;
 error_exit:
-	eo = errno;
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	if (vol->mft_na) {
@@ -407,8 +406,7 @@ error_exit:
 		ntfs_inode_close(vol->mft_ni);
 		vol->mft_ni = NULL;
 	}
-	errno = eo;
-	return -1;
+	return err;
 }
 
 /**

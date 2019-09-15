@@ -728,16 +728,14 @@ s64 ntfs_compressed_attr_pread(ntfs_attr *na, s64 pos, s64 count, void *b)
 			|| ((data_flags & ATTR_COMPRESSION_MASK)
 				!= ATTR_IS_COMPRESSED)
 			|| pos < 0 || count < 0) {
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 	/*
 	 * Encrypted attributes are not supported.  We return access denied,
 	 * which is what Windows NT4 does, too.
 	 */
 	if (NAttrEncrypted(na)) {
-		errno = EACCES;
-		return -1;
+		return -EACCES;
 	}
 	if (!count)
 		return 0;
@@ -809,8 +807,7 @@ do_next_cb:
 		if (total)
 			return total;
 		/* FIXME: Do we want EIO or the error code? (AIA) */
-		errno = EIO;
-		return -1;
+		return -EIO;
 	}
 	if (rl->lcn == LCN_HOLE) {
 		/* Sparse cb, zero out destination range overlapping the cb. */
@@ -852,9 +849,8 @@ do_next_cb:
 						" inode %lld offs 0x%llx\n",
 						(long long)na->ni->mft_no,
 						(long long)ofs);
-					errno = EIO;
+				//	errno = EIO;
 				}
-				err = errno;
 				na->data_size = tdata_size;
 				na->initialized_size = tinitialized_size;
 				na->ni->flags |= compression;
@@ -863,7 +859,6 @@ do_next_cb:
 				free(dest);
 				if (total)
 					return total;
-				errno = err;
 				return br;
 			}
 			total += br;
@@ -912,9 +907,9 @@ do_next_cb:
 						" inode %lld offs 0x%llx\n",
 						(long long)na->ni->mft_no,
 						(long long)(vcn << vol->cluster_size_bits));
-					errno = EIO;
+//					errno = EIO;
 				}
-				err = errno;
+//				err = errno;
 				na->data_size = tdata_size;
 				na->initialized_size = tinitialized_size;
 				na->ni->flags |= compression;
@@ -923,7 +918,7 @@ do_next_cb:
 				free(dest);
 				if (total)
 					return total;
-				errno = err;
+//				errno = err;
 				return br;
 			}
 			cb_pos += br;
