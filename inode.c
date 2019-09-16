@@ -685,8 +685,7 @@ int ntfs_inode_attach_all_extents(ntfs_inode *ni)
 
 	if (!ni) {
 		ntfs_log_trace("Invalid arguments.\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	if (ni->nr_extents == -1)
@@ -700,8 +699,7 @@ int ntfs_inode_attach_all_extents(ntfs_inode *ni)
 
 	if (!ni->attr_list) {
 		ntfs_log_trace("Corrupt in-memory struct.\n");
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	/* Walk through attribute list and attach all extents. */
@@ -944,9 +942,8 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 	int ret = 0;
 	int err = 0;
 	if (!ni) {
-		errno = EINVAL;
 		ntfs_log_error("Failed to sync NULL inode\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_enter("Entering for inode %lld\n", (long long)ni->mft_no);

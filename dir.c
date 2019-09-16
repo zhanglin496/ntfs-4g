@@ -273,8 +273,7 @@ u64 ntfs_inode_lookup_by_name(ntfs_inode *dir_ni,
 	ntfs_log_trace("Entering\n");
 
 	if (!dir_ni || !dir_ni->mrec || !uname || uname_len <= 0) {
-		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 
 	ctx = ntfs_attr_get_search_ctx(dir_ni, NULL);
@@ -367,8 +366,8 @@ u64 ntfs_inode_lookup_by_name(ntfs_inode *dir_ni,
 		if (mref)
 			return mref;
 		ntfs_log_debug("Entry not found - between root entries.\n");
-		errno = ENOENT;
-		return -1;
+//		errno = ENOENT;
+		return -ENOENT;
 	} /* Child node present, descend into it. */
 
 	/* Open the index allocation attribute. */
@@ -403,7 +402,7 @@ descend_into_child_node:
 			index_block_size, ia);
 	if (br != 1) {
 		if (br != -1)
-			errno = EIO;
+			eo = -EIO;
 		ntfs_log_perror("Failed to read vcn 0x%llx",
 			       	(unsigned long long)vcn);
 		goto close_err_out;
@@ -414,7 +413,7 @@ descend_into_child_node:
 				"from expected VCN (0x%llx).\n",
 				(long long)sle64_to_cpu(ia->index_block_vcn),
 				(long long)vcn);
-		errno = EIO;
+		eo = -EIO;
 		goto close_err_out;
 	}
 	if (le32_to_cpu(ia->index.allocated_size) + 0x18 != index_block_size) {
@@ -424,7 +423,7 @@ descend_into_child_node:
 				(unsigned long long)dir_ni->mft_no,
 				(unsigned) le32_to_cpu(ia->index.allocated_size) + 0x18,
 				(unsigned)index_block_size);
-		errno = EIO;
+		eo = -EIO;
 		goto close_err_out;
 	}
 	index_end = (u8*)&ia->index + le32_to_cpu(ia->index.index_length);
@@ -432,7 +431,7 @@ descend_into_child_node:
 		ntfs_log_error("Size of index buffer (VCN 0x%llx) of directory inode "
 				"0x%llx exceeds maximum size.\n",
 				(long long)vcn, (unsigned long long)dir_ni->mft_no);
-		errno = EIO;
+		eo = -EIO;
 		goto close_err_out;
 	}
 
@@ -453,7 +452,7 @@ descend_into_child_node:
 			ntfs_log_error("Index entry out of bounds in directory "
 				       "inode %lld.\n", 
 				       (unsigned long long)dir_ni->mft_no);
-			errno = EIO;
+			eo = -EIO;
 			goto close_err_out;
 		}
 		/*
@@ -464,7 +463,7 @@ descend_into_child_node:
 			break;
 		
 		if (!le16_to_cpu(ie->length)) {
-			errno = EIO;
+			eo = -EIO;
 			ntfs_log_error("Zero length index entry in inode %lld"
 				       "\n", (unsigned long long)dir_ni->mft_no);
 			goto close_err_out;
@@ -502,7 +501,7 @@ descend_into_child_node:
 			ntfs_log_error("Index entry with child node found in a leaf "
 					"node in directory inode %lld.\n",
 					(unsigned long long)dir_ni->mft_no);
-			errno = EIO;
+			eo = -EIO;
 			goto close_err_out;
 		}
 		/* Child node present, descend into it. */
@@ -511,7 +510,7 @@ descend_into_child_node:
 			goto descend_into_child_node;
 		ntfs_log_error("Negative child node vcn in directory inode "
 			       "0x%llx.\n", (unsigned long long)dir_ni->mft_no);
-		errno = EIO;
+		eo = -EIO;
 		goto close_err_out;
 	}
 	free(ia);
@@ -525,17 +524,16 @@ descend_into_child_node:
 	if (mref)
 		return mref;
 	ntfs_log_debug("Entry not found.\n");
-	errno = ENOENT;
-	return -1;
+	return -ENOENT;
 put_err_out:
-	eo = EIO;
+	eo = -EIO;
 	ntfs_log_debug("Corrupt directory. Aborting lookup.\n");
 eo_put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
-	errno = eo;
-	return -1;
+//	errno = eo;
+	return eo;
 close_err_out:
-	eo = errno;
+//	eo = errno;
 	free(ia);
 	ntfs_attr_close(ia_na);
 	goto eo_put_err_out;

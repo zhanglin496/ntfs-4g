@@ -53,7 +53,8 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	bs = (void *)bh->b_data;
 	print_hex(bs, 512);
 
-	vol = ntfs_volume_startup(sb, 0);
+//	vol = ntfs_volume_startup(sb, 0);
+	vol = ntfs_device_mount(sb, 0);
 	if (!vol)
 		goto error_exit;
 	ntfs_log_debug("ntfs_volume_startup success\n");

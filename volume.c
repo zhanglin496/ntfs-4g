@@ -701,8 +701,8 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 	const char *hiberfile = "hiberfil.sys";
 
 	if (!vol) {
-		errno = EINVAL;
-		return NULL;
+//		errno = EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	ni_root = ntfs_inode_open(vol, FILE_root);
@@ -718,7 +718,7 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 	}
 
 	inode = ntfs_inode_lookup_by_name(ni_root, unicode, unicode_len);
-	if (inode == (u64)-1) {
+	if ((s64)inode < 0) {
 		ntfs_log_debug("Couldn't find file '%s'.\n", hiberfile);
 		goto out;
 	}
@@ -913,6 +913,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	if (!vol)
 		return NULL;
 
+	eo = -ENOMEM;
 	/* Load data from $MFT and $MFTMirr and compare the contents. */
 	m  = ntfs_malloc(vol->mftmirr_size << vol->mft_record_size_bits);
 	m2 = ntfs_malloc(vol->mftmirr_size << vol->mft_record_size_bits);
@@ -928,7 +929,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 			ntfs_log_error("Failed to read $MFT, unexpected length "
 				       "(%lld != %d).\n", (long long)l,
 				       vol->mftmirr_size);
-			errno = EIO;
+			eo = -EIO;
 		}
 		goto error_exit;
 	}
@@ -1041,7 +1042,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	if (na->data_size & ~0x1ffffffffULL) {
 		ntfs_log_error("Error: Upcase table is too big (max 32-bit "
 				"allowed).\n");
-		errno = EINVAL;
+		eo = -EINVAL;
 		goto error_exit;
 	}
 	if (vol->upcase_len != na->data_size >> 1) {
@@ -1058,7 +1059,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 		ntfs_log_error("Failed to read $UpCase, unexpected length "
 			       "(%lld != %lld).\n", (long long)l,
 			       (long long)na->data_size);
-		errno = EIO;
+		eo = -EIO;
 		goto error_exit;
 	}
 	/* Done with the $UpCase mft record. */
@@ -1106,7 +1107,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	if (a->non_resident) {
 		ntfs_log_error("Attribute $VOLUME_INFORMATION must be "
 			       "resident but it isn't.\n");
-		errno = EIO;
+		eo = -EIO;
 		goto error_exit;
 	}
 	/* Get a pointer to the value of the attribute. */
@@ -1117,7 +1118,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 			le16_to_cpu(a->value_offset) + le32_to_cpu(
 			a->value_length) > le32_to_cpu(a->length)) {
 		ntfs_log_error("$VOLUME_INFORMATION in $Volume is corrupt.\n");
-		errno = EIO;
+		eo = -EIO;
 		goto error_exit;
 	}
 	/* Setup vol from the volume information attribute value. */
@@ -1130,9 +1131,9 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	 * Reinitialize the search context for the $Volume/$VOLUME_NAME lookup.
 	 */
 	ntfs_attr_reinit_search_ctx(ctx);
-	if (ntfs_attr_lookup(AT_VOLUME_NAME, AT_UNNAMED, 0, 0, 0, NULL, 0,
-			ctx)) {
-		if (errno != ENOENT) {
+	if ((eo = ntfs_attr_lookup(AT_VOLUME_NAME, AT_UNNAMED, 0, 0, 0, NULL, 0,
+			ctx))) {
+		if (eo != -ENOENT) {
 			ntfs_log_perror("Failed to lookup of $VOLUME_NAME in "
 					"$Volume failed");
 			goto error_exit;
@@ -1151,7 +1152,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 		/* Has to be resident. */
 		if (a->non_resident) {
 			ntfs_log_error("$VOLUME_NAME must be resident.\n");
-			errno = EIO;
+			eo = -EIO;
 			goto error_exit;
 		}
 		/* Get a pointer to the value of the attribute. */
@@ -1199,7 +1200,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	if (na->data_size > 0xffffffffLL) {
 		ntfs_log_error("Attribute definition table is too big (max "
 			       "32-bit allowed).\n");
-		errno = EINVAL;
+		eo = -EINVAL;
 		goto error_exit;
 	}
 	vol->attrdef_len = na->data_size;
@@ -1212,7 +1213,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 		ntfs_log_error("Failed to read $AttrDef, unexpected length "
 			       "(%lld != %lld).\n", (long long)l,
 			       (long long)na->data_size);
-		errno = EIO;
+		eo = -EIO;
 		goto error_exit;
 	}
 	/* Done with the $AttrDef mft record. */
@@ -1265,16 +1266,16 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 
 	return vol;
 io_error_exit:
-	errno = EIO;
+	eo = -EIO;
 error_exit:
-	eo = errno;
+//	eo = errno;
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	free(m);
 	free(m2);
 	__ntfs_volume_release(vol);
-	errno = eo;
-	return NULL;
+//	errno = eo;
+	return ERR_PTR(eo);
 }
 
 /*
@@ -1630,8 +1631,8 @@ int ntfs_volume_write_flags(ntfs_volume *vol, const le16 flags)
 	int ret = -1;	/* failure */
 
 	if (!vol || !vol->vol_ni) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	/* Get a pointer to the volume information attribute. */
 	ctx = ntfs_attr_get_search_ctx(vol->vol_ni, NULL);
@@ -1649,7 +1650,7 @@ int ntfs_volume_write_flags(ntfs_volume *vol, const le16 flags)
 	if (a->non_resident) {
 		ntfs_log_error("Attribute $VOLUME_INFORMATION must be resident "
 			       "but it isn't.\n");
-		errno = EIO;
+		ret = -EIO;
 		goto err_out;
 	}
 	/* Get a pointer to the value of the attribute. */
@@ -1661,7 +1662,7 @@ int ntfs_volume_write_flags(ntfs_volume *vol, const le16 flags)
 			le32_to_cpu(a->value_length) > le32_to_cpu(a->length)) {
 		ntfs_log_error("Attribute $VOLUME_INFORMATION in $Volume is "
 			       "corrupt!\n");
-		errno = EIO;
+		ret = -EIO;
 		goto err_out;
 	}
 	/* Set the volume flags. */
