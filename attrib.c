@@ -405,29 +405,36 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	ntfschar *newname = NULL;
 	ATTR_RECORD *a;
 	le16 cs;
+	int err;
 
 	ntfs_log_enter("Entering for inode %lld, attr 0x%x.\n",
 		       (unsigned long long)ni->mft_no, le32_to_cpu(type));
 	
 	if (!ni || !ni->vol || !ni->mrec) {
-		errno = EINVAL;
+		err = -EINVAL;
 		goto out;
 	}
 	na = ntfs_calloc(sizeof(ntfs_attr));
-	if (!na)
+	if (!na) {
+		err = -ENOMEM;
 		goto out;
+	}
 	if (name && name != AT_UNNAMED && name != NTFS_INDEX_I30) {
 		name = ntfs_ucsndup(name, name_len);
-		if (!name)
+		if (!name) {
+			err = -ENOMEM;
 			goto err_out;
+		}
 		newname = name;
 	}
 
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (!ctx)
+	if (!ctx) {
+		err = -ENOMEM;
 		goto err_out;
+	}
 
-	if (ntfs_attr_lookup(type, name, name_len, 0, 0, NULL, 0, ctx))
+	if ((err = ntfs_attr_lookup(type, name, name_len, 0, 0, NULL, 0, ctx)))
 		goto put_err_out;
 
 	a = ctx->attr;
@@ -436,8 +443,10 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 		if (a->name_length) {
 			name = ntfs_ucsndup((ntfschar*)((u8*)a + le16_to_cpu(
 					a->name_offset)), a->name_length);
-			if (!name)
+			if (!name) {
+				err = -ENOMEM;
 				goto put_err_out;
+			}
 			newname = name;
 			name_len = a->name_length;
 		} else {
@@ -483,7 +492,7 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	if (na->type == AT_DATA && na->name == AT_UNNAMED &&
 	    (((a->flags & ATTR_IS_SPARSE)     && !NAttrSparse(na)) ||
 	     (!(a->flags & ATTR_IS_ENCRYPTED)  != !NAttrEncrypted(na)))) {
-		errno = EIO;
+		err = -EIO;
 		ntfs_log_perror("Inode %lld has corrupt attribute flags "
 				"(0x%x <> 0x%x)",(unsigned long long)ni->mft_no,
 				le16_to_cpu(a->flags), le32_to_cpu(na->ni->flags));
@@ -493,7 +502,7 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	if (a->non_resident) {
 		if ((a->flags & ATTR_COMPRESSION_MASK)
 				 && !a->compression_unit) {
-			errno = EIO;
+			err = -EIO;
 			ntfs_log_perror("Compressed inode %lld attr 0x%x has "
 					"no compression unit",
 					(unsigned long long)ni->mft_no, le32_to_cpu(type));
@@ -516,8 +525,8 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	}
 	ntfs_attr_put_search_ctx(ctx);
 out:
-	ntfs_log_leave("\n");	
-	return na;
+	ntfs_log_leave("\n");
+	return na ? : ERR_PTR(err);
 
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
