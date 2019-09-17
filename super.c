@@ -165,7 +165,11 @@ static int ntfs_getattr(const struct path *path, struct kstat *stat,
 			 u32 request_mask, unsigned int flags)
 {
 	ntfs_log_debug("%s\n", __func__);
-	return -EOPNOTSUPP;
+	struct inode *inode = path->dentry->d_inode;
+
+	generic_fillattr(inode, stat);
+
+	return 0;
 }
 
 const struct inode_operations ntfs_dir_inode_operations = {
