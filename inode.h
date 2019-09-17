@@ -164,6 +164,7 @@ struct _ntfs_inode {
 	le32 security_id;
 	le64 quota_charged;
 	le64 usn;
+	struct inode vfs_inode;
 };
 
 typedef enum {

@@ -708,7 +708,7 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 	ni_root = ntfs_inode_open(vol, FILE_root);
 	if (!ni_root) {
 		ntfs_log_debug("Couldn't open the root directory.\n");
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	unicode_len = ntfs_mbstoucs(hiberfile, &unicode);
@@ -760,6 +760,8 @@ int ntfs_volume_check_hiberfile(ntfs_volume *vol, int verbose)
 	if (!ni) {
 		if (errno == ENOENT)
 			return 0;
+//		ntfs_log_perror("%s error\n", __func__);
+		return 0;
 		return -1;
 	}
 
