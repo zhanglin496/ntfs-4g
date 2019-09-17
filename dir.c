@@ -1135,20 +1135,21 @@ int ntfs_readdir(ntfs_inode *dir_ni, s64 *pos,
 	INDEX_ROOT *ir;
 	INDEX_ENTRY *ie;
 	INDEX_ALLOCATION *ia = NULL;
-	int rc, ir_pos, bmp_buf_size, bmp_buf_pos, eo;
+	int rc, ir_pos, bmp_buf_size, bmp_buf_pos;
 	u32 index_block_size;
 	u8 index_block_size_bits, index_vcn_size_bits;
+	int eo = -EIO;
 
 	ntfs_log_trace("Entering.\n");
 	
 	if (!dir_ni || !pos || !filldir) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	if (!(dir_ni->mrec->flags & MFT_RECORD_IS_DIRECTORY)) {
-		errno = ENOTDIR;
-		return -1;
+//		errno = ENOTDIR;
+		return -ENOTDIR;
 	}
 
 	vol = dir_ni->vol;
@@ -1158,8 +1159,8 @@ int ntfs_readdir(ntfs_inode *dir_ni, s64 *pos,
 
 	/* Open the index allocation attribute. */
 	ia_na = ntfs_attr_open(dir_ni, AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4);
-	if (!ia_na) {
-		if (errno != ENOENT) {
+	if (IS_ERR(ia_na)) {
+		if (PTR_ERR(ia_na) != -ENOENT) {
 			ntfs_log_perror("Failed to open index allocation attribute. "
 				"Directory inode %lld is corrupt or bug",
 				(unsigned long long)dir_ni->mft_no);
@@ -1322,8 +1323,8 @@ skip_index_root:
 
 	br = ntfs_attr_pread(bmp_na, bmp_pos >> 3, bmp_buf_size, bmp);
 	if (br != bmp_buf_size) {
-		if (br != -1)
-			errno = EIO;
+//		if (br != -1)
+			eo = -EIO;
 		ntfs_log_perror("Failed to read from index bitmap attribute");
 		goto err_out;
 	}
@@ -1346,8 +1347,8 @@ find_next_index_buffer:
 			bmp_buf_size = bmp_na->data_size - (bmp_pos >> 3);
 		br = ntfs_attr_pread(bmp_na, bmp_pos >> 3, bmp_buf_size, bmp);
 		if (br != bmp_buf_size) {
-			if (br != -1)
-				errno = EIO;
+//			if (br != -1)
+				eo = EIO;
 			ntfs_log_perror("Failed to read from index bitmap attribute");
 			goto err_out;
 		}
@@ -1359,8 +1360,8 @@ find_next_index_buffer:
 	br = ntfs_attr_mst_pread(ia_na, bmp_pos << index_block_size_bits, 1,
 			index_block_size, ia);
 	if (br != 1) {
-		if (br != -1)
-			errno = EIO;
+//		if (br != -1)
+			eo = -EIO;
 		ntfs_log_perror("Failed to read index block");
 		goto err_out;
 	}
@@ -1446,9 +1447,9 @@ done:
 	ntfs_log_debug("EOD, *pos 0x%llx, returning 0.\n", (long long)*pos);
 	return 0;
 dir_err_out:
-	errno = EIO;
+	eo = -EIO;
 err_out:
-	eo = errno;
+//	eo = errno;
 	ntfs_log_trace("failed.\n");
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
@@ -1458,8 +1459,8 @@ err_out:
 		ntfs_attr_close(bmp_na);
 	if (ia_na)
 		ntfs_attr_close(ia_na);
-	errno = eo;
-	return -1;
+//	errno = eo;
+	return eo;
 }
 
 
