@@ -27,6 +27,7 @@
 
 static struct inode *ntfs_alloc_inode(struct super_block *sb)
 {
+	ntfs_log_debug("%s\n", __func__);
 	ntfs_inode *ni;
 	ni = ntfs_inode_allocate(sb->s_fs_info);
 	if (!ni)
@@ -39,16 +40,19 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 
 static void ntfs_destroy_inode(struct inode *inode)
 {
+	ntfs_log_debug("%s\n", __func__);
 	kfree(EXNTFS_I(inode));
 }
 
 static int ntfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return 0;
 }
 
 static void ntfs_evict_inode(struct inode *inode)
 {
+	ntfs_log_debug("%s\n", __func__);
 	truncate_inode_pages(&inode->i_data, 0);
 
 	if (!inode->i_nlink)
@@ -61,10 +65,12 @@ static void ntfs_evict_inode(struct inode *inode)
 
 static void ntfs_put_super(struct super_block *sb)
 {
+	ntfs_log_debug("%s\n", __func__);
 }
 
 static int ntfs_sync_fs(struct super_block *sb, int wait)
 {
+	ntfs_log_debug("%s\n", __func__);
 	int err = 0;
 
 
@@ -73,16 +79,19 @@ static int ntfs_sync_fs(struct super_block *sb, int wait)
 
 static int ntfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -1;
 }
 
 static int ntfs_remount(struct super_block *sb, int *flags, char *data)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -1;
 }
 
 static int ntfs_show_options(struct seq_file *m, struct dentry *root)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return 0;
 }
 
@@ -104,12 +113,14 @@ static const struct super_operations ntfs_sops = {
 static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 						bool excl)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
 static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
@@ -120,16 +131,19 @@ static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
 
 static int ntfs_symlink(struct inode *dir, struct dentry *dentry, const char *target)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
 static int ntfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
 static int ntfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
@@ -137,17 +151,20 @@ static int ntfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			struct inode *new_dir, struct dentry *new_dentry,
 			unsigned int flags)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
 static int ntfs_setattr(struct dentry *dentry, struct iattr *attr)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
 static int ntfs_getattr(const struct path *path, struct kstat *stat,
 			 u32 request_mask, unsigned int flags)
 {
+	ntfs_log_debug("%s\n", __func__);
 	return -EOPNOTSUPP;
 }
 
@@ -217,6 +234,7 @@ static void print_hex(void *data, int len)
 
 static int ntfs_read_root(struct inode *inode)
 {
+	inode->i_mode = S_IFDIR;
 	inode->i_blocks = 30000;
 	inode->i_state = I_NEW;
 	inode->i_op = &ntfs_dir_inode_operations;
@@ -246,13 +264,13 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_max_links = 10000;
 
-	ni = ntfs_inode_open(vol, FILE_root);
+	ni = ntfs_inode_open(vol, FILE_MFT);
 	if (!ni)
 		goto error_exit;
 
 	ntfs_log_debug("%d\n", __LINE__);
 	root_inode = &ni->vfs_inode;
-	root_inode->i_ino = ni->mft_no;
+	root_inode->i_ino = FILE_MFT;
 	inode_init_always(sb, root_inode);
 	inode_set_iversion(root_inode, 1);
 	INIT_LIST_HEAD(&root_inode->i_sb_list);
