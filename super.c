@@ -37,7 +37,6 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 	return &ni->vfs_inode;
 }
 
-
 static void ntfs_destroy_inode(struct inode *inode)
 {
 	ntfs_log_debug("%s\n", __func__);
@@ -95,7 +94,6 @@ static int ntfs_show_options(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
-
 static const struct super_operations ntfs_sops = {
 	.alloc_inode	= ntfs_alloc_inode,
 	.destroy_inode	= ntfs_destroy_inode,
@@ -108,8 +106,6 @@ static const struct super_operations ntfs_sops = {
 	.show_options	= ntfs_show_options,
 };
 
-
-
 static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 						bool excl)
 {
@@ -121,7 +117,17 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
 	ntfs_log_debug("%s\n", __func__);
-	return -EOPNOTSUPP;
+	ntfs_inode *ni = EXNTFS_I(dir);
+	ni = ntfs_pathname_to_inode(ni->vol, ni, dentry->d_name.name);
+	ntfs_log_debug("ni=%p\n", ni);
+	if (!IS_ERR(ni)) {
+		ntfs_log_debug("error\n");
+//		ntfs_inode_close(ni);
+		return d_splice_alias(&ni->vfs_inode, dentry);
+	}
+
+	return ERR_PTR(-EOPNOTSUPP);
+	return IS_ERR(ni) ? ERR_PTR(-EOPNOTSUPP) : ni;
 }
 
 static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
@@ -201,9 +207,12 @@ static int ntfs_filldir(void *dirent, const ntfschar *name,
 		const int name_len, const int name_type, const s64 pos,
 		const MFT_REF mref, const unsigned dt_type)
 {
+	char data[128];
 	int ret;
 	ret = !dir_emit(dirent, (void *)name, name_len, MREF(mref), dt_type);
-	ntfs_log_debug("dir_emit %d\n", ret);
+	memcpy(data, name, name_len);
+	data[name_len] = 0;
+	ntfs_log_debug("dir_emit %d, name=%s, len=%d\n", ret, data, name_len);
 	return ret;
 }
 
@@ -310,7 +319,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	inode_set_iversion(root_inode, 1);
 	INIT_LIST_HEAD(&root_inode->i_sb_list);
 	inode_sb_list_add(root_inode);
-	
+	ntfs_attr_put_search_ctx(ctx);	
 	ntfs_log_debug("%d, size=%llu\n", __LINE__, root_inode->i_size);
 	ret = ntfs_read_root(root_inode);
 	if (ret < 0)

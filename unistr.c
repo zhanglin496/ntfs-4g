@@ -51,6 +51,8 @@
 #endif /* ENABLE_NFCONV */
 #endif /* defined(__APPLE__) || defined(__DARWIN__) */
 
+#include <linux/nls.h>
+
 #include "compat.h"
 #include "attrib.h"
 #include "types.h"
@@ -1749,3 +1751,68 @@ int ntfs_macosx_normalize_utf8(const char *utf8_string, char **target,
 #endif /* ENABLE_NFCONV */
 }
 #endif /* defined(__APPLE__) || defined(__DARWIN__) */
+
+int ntfs_ucstonls(const ntfs_volume *vol, const ntfschar *ins,
+		const int ins_len, unsigned char **outs, int outs_len)
+{
+	struct nls_table *nls = load_nls_default();
+	unsigned char *ns;
+	int i, o, ns_len, wc;
+
+	/* We don't trust outside sources. */
+	if (ins) {
+		ns = *outs;
+		ns_len = outs_len;
+		if (ns && !ns_len) {
+			wc = -ENAMETOOLONG;
+			goto conversion_err;
+		}
+		if (!ns) {
+			ns_len = ins_len * NLS_MAX_CHARSET_SIZE;
+			ns = kmalloc(ns_len + 1, GFP_NOFS);
+			if (!ns)
+				goto mem_err_out;
+		}
+		for (i = o = 0; i < ins_len; i++) {
+retry:			wc = nls->uni2char(le16_to_cpu(ins[i]), ns + o,
+					ns_len - o);
+			if (wc > 0) {
+				o += wc;
+				continue;
+			} else if (!wc)
+				break;
+			else if (wc == -ENAMETOOLONG && ns != *outs) {
+				unsigned char *tc;
+				/* Grow in multiples of 64 bytes. */
+				tc = kmalloc((ns_len + 64) &
+						~63, GFP_NOFS);
+				if (tc) {
+					memcpy(tc, ns, ns_len);
+					ns_len = ((ns_len + 64) & ~63) - 1;
+					kfree(ns);
+					ns = tc;
+					goto retry;
+				} /* No memory so goto conversion_error; */
+			} /* wc < 0, real error. */
+			goto conversion_err;
+		}
+		ns[o] = 0;
+		*outs = ns;
+		return o;
+	} /* else (!ins) */
+	ntfs_log_error("Received NULL pointer.");
+	return -EINVAL;
+conversion_err:
+	ntfs_log_error("Unicode name contains characters that cannot be "
+			"converted to character set %s.  You might want to "
+			"try to use the mount option nls=utf8.", nls->charset);
+	if (ns != *outs)
+		kfree(ns);
+	if (wc != -ENAMETOOLONG)
+		wc = -EILSEQ;
+	return wc;
+mem_err_out:
+	ntfs_log_error("Failed to allocate name!");
+	return -ENOMEM;
+}
+

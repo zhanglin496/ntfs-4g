@@ -71,6 +71,7 @@
 #include "reparse.h"
 #include "object_id.h"
 #include "xattrs.h"
+#include "unistr.h"
 
 static int errno;
 #define major(dev) MAJOR(dev)
@@ -687,7 +688,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 
 	if (!vol || !pathname) {
 		errno = EINVAL;
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 	
 	ntfs_log_trace("path: '%s'\n", pathname);
@@ -695,7 +696,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 	ascii = strdup(pathname);
 	if (!ascii) {
 		ntfs_log_error("Out of memory.\n");
-		err = ENOMEM;
+		err = -ENOMEM;
 		goto out;
 	}
 
@@ -732,7 +733,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 			if (!ni) {
 				ntfs_log_debug("Cannot open inode %llu: %s.\n",
 						(unsigned long long)inum, p);
-				err = EIO;
+				err = -EIO;
 			}
 			result = ni;
 			goto out;
@@ -781,7 +782,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 				err = errno;
 				goto close;
 			} else if (len > NTFS_MAX_NAME_LEN) {
-				err = ENAMETOOLONG;
+				err = -ENAMETOOLONG;
 				goto close;
 			}
 			inum = ntfs_inode_lookup_by_name(ni, unicode, len);
@@ -797,10 +798,11 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		if (len < 0) {
 			ntfs_log_perror("Could not convert filename to Unicode:"
 					" '%s'", p);
-			err = errno;
+//			err = errno;
+			err = len;
 			goto close;
 		} else if (len > NTFS_MAX_NAME_LEN) {
-			err = ENAMETOOLONG;
+			err = -ENAMETOOLONG;
 			goto close;
 		}
 		inum = ntfs_inode_lookup_by_name(ni, unicode, len);
@@ -808,7 +810,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		if (inum == (u64) -1) {
 			ntfs_log_debug("Couldn't find name '%s' in pathname "
 					"'%s'.\n", p, pathname);
-			err = ENOENT;
+			err = -ENOENT;
 			goto close;
 		}
 
@@ -823,7 +825,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		if (!ni) {
 			ntfs_log_debug("Cannot open inode %llu: %s.\n",
 					(unsigned long long)inum, p);
-			err = EIO;
+			err = -EIO;
 			goto close;
 		}
 	
@@ -841,13 +843,14 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 close:
 	if (ni && (ni != parent))
 		if (ntfs_inode_close(ni) && !err)
-			err = errno;
+			;
+//			err = errno;
 out:
 	free(ascii);
 	free(unicode);
-	if (err)
-		errno = err;
-	return result;
+//	if (err)
+//		errno = err;
+	return result ? : ERR_PTR(err);
 }
 
 /*
@@ -1017,7 +1020,7 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 				|| !(fn->file_attributes & FILE_ATTR_HIDDEN)))
             || (NVolShowSysFiles(dir_ni->vol) && (NVolShowHidFiles(dir_ni->vol)
 				|| metadata))) {
-		if (NVolCaseSensitive(dir_ni->vol)) {
+		if (NVolCaseSensitive(dir_ni->vol) && 0) {
 			res = filldir(dirent, fn->file_name,
 					fn->file_name_length,
 					fn->file_name_type, *pos,
@@ -1025,16 +1028,24 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 		} else {
 			loname = (ntfschar*)ntfs_malloc(2*fn->file_name_length);
 			if (loname) {
-				memcpy(loname, fn->file_name,
-					2*fn->file_name_length);
-				ntfs_name_locase(loname, fn->file_name_length,
-					dir_ni->vol->locase,
-					dir_ni->vol->upcase_len);
-				res = filldir(dirent, loname,
-					fn->file_name_length,
-					fn->file_name_type, *pos,
-					mref, dt_type);
+				int len = ntfs_ucstonls(dir_ni->vol, fn->file_name,
+			                 fn->file_name_length, (void *)&loname, 2*fn->file_name_length);
+				if (len > 0)
+					res = filldir(dirent, loname,
+						len, fn->file_name_type, *pos,
+						mref, dt_type);
+//				memcpy(loname, fn->file_name,
+//					2*fn->file_name_length);
+//				ntfs_name_locase(loname, fn->file_name_length,
+//					dir_ni->vol->locase,
+//					dir_ni->vol->upcase_len);
+//				res = filldir(dirent, loname,
+//					fn->file_name_length,
+//					fn->file_name_type, *pos,
+//					mref, dt_type);
+				ntfs_log_debug("len %d\n", len);
 				free(loname);
+				res = 0;
 			} else
 				res = -1;
 		}

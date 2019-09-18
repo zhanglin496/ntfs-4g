@@ -76,6 +76,8 @@ extern BOOL ntfs_collapsible_chars(ntfs_volume *vol,
 				const ntfschar *longname, int longlen);
 
 extern int ntfs_set_char_encoding(const char *locale);
+int ntfs_ucstonls(const ntfs_volume *vol, const ntfschar *ins,
+		const int ins_len, unsigned char **outs, int outs_len);
 
 #if defined(__APPLE__) || defined(__DARWIN__)
 /**
