@@ -262,7 +262,7 @@ static int ntfs_mft_load(ntfs_volume *vol)
 	l = ntfs_mst_pread(vol->dev, vol->mft_lcn << vol->cluster_size_bits, 1,
 			vol->mft_record_size, mb);
 	if (l != 1) {
-		if (l != -1)
+//		if (l != -1)
 			err = -EIO;
 		ntfs_log_perror("Error reading $MFT");
 		goto error_exit;
@@ -316,7 +316,7 @@ mft_has_no_attr_list:
 	
 	/* Get an ntfs attribute for $MFT/$DATA and set it up, too. */
 	vol->mft_na = ntfs_attr_open(vol->mft_ni, AT_DATA, AT_UNNAMED, 0);
-	if (!vol->mft_na) {
+	if (IS_ERR(vol->mft_na)) {
 		ntfs_log_perror("Failed to open ntfs attribute");
 		goto error_exit;
 	}
@@ -392,7 +392,7 @@ mft_has_no_attr_list:
 	 * The volume is now setup so we can use all read access functions.
 	 */
 	vol->mftbmp_na = ntfs_attr_open(vol->mft_ni, AT_BITMAP, AT_UNNAMED, 0);
-	if (!vol->mftbmp_na) {
+	if (IS_ERR(vol->mftbmp_na)) {
 		ntfs_log_perror("Failed to open $MFT/$BITMAP");
 		goto error_exit;
 	}
@@ -402,11 +402,11 @@ io_error_exit:
 error_exit:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
-	if (vol->mft_na) {
+	if (!IS_ERR(vol->mft_na)) {
 		ntfs_attr_close(vol->mft_na);
 		vol->mft_na = NULL;
 	}
-	if (vol->mft_ni) {
+	if (!IS_ERR(vol->mft_ni)) {
 		ntfs_inode_close(vol->mft_ni);
 		vol->mft_ni = NULL;
 	}
@@ -429,14 +429,15 @@ static int ntfs_mftmirr_load(ntfs_volume *vol)
 	int err;
 
 	vol->mftmirr_ni = ntfs_inode_open(vol, FILE_MFTMirr);
-	if (!vol->mftmirr_ni) {
+	if (IS_ERR(vol->mftmirr_ni)) {
 		ntfs_log_perror("Failed to open inode $MFTMirr");
-		return -1;
+		return PTR_ERR(vol->mftmirr_ni);
 	}
 	
 	vol->mftmirr_na = ntfs_attr_open(vol->mftmirr_ni, AT_DATA, AT_UNNAMED, 0);
-	if (!vol->mftmirr_na) {
+	if (IS_ERR(vol->mftmirr_na)) {
 		ntfs_log_perror("Failed to open $MFTMirr/$DATA");
+		err = PTR_ERR(ol->mftmirr_na);
 		goto error_exit;
 	}
 	
@@ -448,15 +449,13 @@ static int ntfs_mftmirr_load(ntfs_volume *vol)
 	return 0;
 
 error_exit:
-	err = errno;
-	if (vol->mftmirr_na) {
+	if (!IS_ERR(vol->mftmirr_na)) {
 		ntfs_attr_close(vol->mftmirr_na);
 		vol->mftmirr_na = NULL;
 	}
 	ntfs_inode_close(vol->mftmirr_ni);
 	vol->mftmirr_ni = NULL;
-	errno = err;
-	return -1;
+	return err;
 }
 
 /**
@@ -643,21 +642,21 @@ static int ntfs_volume_check_logfile(ntfs_volume *vol)
 	int err = 0;
 
 	ni = ntfs_inode_open(vol, FILE_LogFile);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Failed to open inode FILE_LogFile");
-		errno = EIO;
-		return -1;
+//		errno = EIO;
+		return -EIO;
 	}
 	
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open $FILE_LogFile/$DATA");
-		err = EIO;
+		err = -EIO;
 		goto out;
 	}
 	
 	if (!ntfs_check_logfile(na, &rp) || !ntfs_is_logfile_clean(na, rp))
-		err = EOPNOTSUPP;
+		err = -EOPNOTSUPP;
 		/*
 		 * If the latest restart page was identified as version
 		 * 2.0, then Windows may have kept a cached copy of
@@ -674,18 +673,14 @@ static int ntfs_volume_check_logfile(ntfs_volume *vol)
 	    && (rp->major_ver == const_cpu_to_le16(2))
 	    && (rp->minor_ver == const_cpu_to_le16(0))) {
 		ntfs_log_error("Metadata kept in Windows cache, refused to mount.\n");
-		err = EPERM;
+		err = -EPERM;
 	}
 	free(rp);
 	ntfs_attr_close(na);
 out:	
 	if (ntfs_inode_close(ni))
 		ntfs_error_set(&err);
-	if (err) {
-		errno = err;
-		return -1;
-	}
-	return 0;
+	return err;
 }
 
 /**
@@ -702,6 +697,7 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 	ntfs_inode *ni_hibr = NULL;
 	ntfschar   *unicode = NULL;
 	int unicode_len;
+	int err;
 	const char *hiberfile = "hiberfil.sys";
 
 	if (!vol) {
@@ -710,7 +706,7 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 	}
 
 	ni_root = ntfs_inode_open(vol, FILE_root);
-	if (!ni_root) {
+	if (IS_ERR(ni_root)) {
 		ntfs_log_debug("Couldn't open the root directory.\n");
 		return ERR_PTR(-ENOMEM);
 	}
@@ -723,20 +719,21 @@ static ntfs_inode *ntfs_hiberfile_open(ntfs_volume *vol)
 
 	inode = ntfs_inode_lookup_by_name(ni_root, unicode, unicode_len);
 	if ((s64)inode < 0) {
+		ni_hibr = ERR_PTR(inode);
 		ntfs_log_debug("Couldn't find file '%s'.\n", hiberfile);
 		goto out;
 	}
 
 	inode = MREF(inode);
 	ni_hibr = ntfs_inode_open(vol, inode);
-	if (!ni_hibr) {
+	if (IS_ERR(ni_hibr)) {
 		ntfs_log_debug("Couldn't open inode %lld.\n", (long long)inode);
 		goto out;
 	}
 out:
-	if (ntfs_inode_close(ni_root)) {
+	if ((err = ntfs_inode_close(ni_root))) {
 		ntfs_inode_close(ni_hibr);
-		ni_hibr = NULL;
+		ni_hibr = ERR_PTR(err);
 	}
 	free(unicode);
 	return ni_hibr;
@@ -757,15 +754,14 @@ int ntfs_volume_check_hiberfile(ntfs_volume *vol, int verbose)
 {
 	ntfs_inode *ni;
 	ntfs_attr *na = NULL;
-	int bytes_read, err;
+	int bytes_read, err = -ENOMEM;
 	char *buf = NULL;
 
 	ni = ntfs_hiberfile_open(vol);
-	if (!ni) {
-		if (errno == ENOENT)
+	if (IS_ERR(ni)) {
+		if (PTR_ERR(ni) == -ENOENT)
 			return 0;
-//		ntfs_log_perror("%s error\n", __func__);
-		return 0;
+		ntfs_log_perror("%s error\n", __func__);
 		return -1;
 	}
 
@@ -774,8 +770,9 @@ int ntfs_volume_check_hiberfile(ntfs_volume *vol, int verbose)
 		goto out;
 
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open hiberfil.sys data attribute");
+		err = PTR_ERR(na);
 		goto out;
 	}
 
@@ -788,27 +785,25 @@ int ntfs_volume_check_hiberfile(ntfs_volume *vol, int verbose)
 		if (verbose)
 			ntfs_log_error("Hibernated non-system partition, "
 				       "refused to mount.\n");
-		errno = EPERM;
+		err = -EPERM;
 		goto out;
 	}
 	if ((memcmp(buf, "hibr", 4) == 0)
 	   ||  (memcmp(buf, "HIBR", 4) == 0)) {
 		if (verbose)
 			ntfs_log_error("Windows is hibernated, refused to mount.\n");
-		errno = EPERM;
+		err = -EPERM;
 		goto out;
 	}
         /* All right, all header bytes are zero */
-	errno = 0;
+	err = 0;
 out:
-	if (na)
+	if (!IS_ERR_OR_NULL(na))
 		ntfs_attr_close(na);
 	free(buf);
-	err = errno;
 	if (ntfs_inode_close(ni))
 		ntfs_error_set(&err);
-	errno = err;
-	return errno ? -1 : 0;
+	return err;
 }
 
 /*
@@ -1692,29 +1687,29 @@ int ntfs_volume_error(int err)
 		case 0:
 			ret = NTFS_VOLUME_OK;
 			break;
-		case EINVAL:
+		case -EINVAL:
 			ret = NTFS_VOLUME_NOT_NTFS;
 			break;
-		case EIO:
+		case -EIO:
 			ret = NTFS_VOLUME_CORRUPT;
 			break;
-		case EPERM:
+		case -EPERM:
 			/*
 			 * Hibernation and fast restarting are seen the
 			 * same way on a non Windows-system partition.
 			 */
 			ret = NTFS_VOLUME_HIBERNATED;
 			break;
-		case EOPNOTSUPP:
+		case -EOPNOTSUPP:
 			ret = NTFS_VOLUME_UNCLEAN_UNMOUNT;
 			break;
-		case EBUSY:
+		case -EBUSY:
 			ret = NTFS_VOLUME_LOCKED;
 			break;
-		case ENXIO:
+		case -ENXIO:
 			ret = NTFS_VOLUME_RAID;
 			break;
-		case EACCES:
+		case -EACCES:
 			ret = NTFS_VOLUME_NO_PRIVILEGE;
 			break;
 		default:
@@ -1806,7 +1801,7 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 		ntfs_log_error("Refusing to change label on read-only mounted "
 			"volume.\n");
 		errno = EROFS;
-		return -1;
+		return -EROFS;
 	}
 
 	label_len *= sizeof(ntfschar);
@@ -1815,13 +1810,13 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 				"allowed.\n",
 				(unsigned)(0x100 / sizeof(ntfschar)));
 		errno = ERANGE;
-		return -1;
+		return -ERANGE;
 	}
 
 	na = ntfs_attr_open(vol->vol_ni, AT_VOLUME_NAME, AT_UNNAMED, 0);
-	if (!na) {
-		if (errno != ENOENT) {
-			err = errno;
+	if (IS_ERR(na)) {
+		if (PTR_ERR(na) != -ENOENT) {
+			err = PTR_ERR(na);
 			ntfs_log_perror("Lookup of $VOLUME_NAME attribute "
 				"failed");
 			goto err_out;
@@ -1865,7 +1860,7 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 				goto err_out;
 			}
 			else if (written != label_len) {
-				err = EIO;
+				err = -EIO;
 				ntfs_log_error("Partial write when writing "
 					"$VOLUME_NAME data.");
 				goto err_out;
@@ -1888,9 +1883,7 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 
 	err = 0;
 err_out:
-	if (na)
+	if (!IS_ERR(na))
 		ntfs_attr_close(na);
-	if (err)
-		errno = err;
-	return err ? -1 : 0;
+	return err;
 }

@@ -279,7 +279,7 @@ u64 ntfs_inode_lookup_by_name(ntfs_inode *dir_ni,
 
 	ctx = ntfs_attr_get_search_ctx(dir_ni, NULL);
 	if (!ctx)
-		return -1;
+		return -ENOMEM;
 
 	/* Find the index root attribute in the mft record. */
 	if (ntfs_attr_lookup(AT_INDEX_ROOT, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
@@ -402,7 +402,7 @@ descend_into_child_node:
 	br = ntfs_attr_mst_pread(ia_na, vcn << index_vcn_size_bits, 1,
 			index_block_size, ia);
 	if (br != 1) {
-		if (br != -1)
+//		if (br != -1)
 			eo = -EIO;
 		ntfs_log_perror("Failed to read vcn 0x%llx",
 			       	(unsigned long long)vcn);
