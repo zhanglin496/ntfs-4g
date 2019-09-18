@@ -57,22 +57,24 @@
 
 #define DEBUG
 
+#define ntfs_fmt(fmt)  "[%s %d]"": " fmt, __func__, __LINE__
+
 /* By default debug and trace messages are compiled into the program,
  * but not displayed.
  */
 #ifdef DEBUG
-#define ntfs_log_debug(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_trace(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_enter(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_leave(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_critical(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_error(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_info(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_perror(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_progress(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_quiet(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_verbose(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
-#define ntfs_log_warning(FORMAT, ...) do { printk(FORMAT, ##__VA_ARGS__);} while (0)
+#define ntfs_log_debug(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_trace(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_enter(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_leave(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_critical(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_error(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_info(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_perror(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_progress(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_quiet(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_verbose(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_warning(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
 #else
 #define ntfs_log_debug(FORMAT, ARGS...)do {} while (0)
 #define ntfs_log_trace(FORMAT, ARGS...)do {} while (0)

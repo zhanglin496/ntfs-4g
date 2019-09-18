@@ -172,6 +172,11 @@ static int ntfs_getattr(const struct path *path, struct kstat *stat,
 	return 0;
 }
 
+static int ntfs_update_time(struct inode *inode, struct timespec64 *time, int flags)
+{
+	return 0;
+}
+
 const struct inode_operations ntfs_dir_inode_operations = {
 	.create        = __ntfs_create,
 	.lookup        = ntfs_lookup,
@@ -182,6 +187,7 @@ const struct inode_operations ntfs_dir_inode_operations = {
 	.rename        = ntfs_rename,
 	.setattr       = ntfs_setattr,
 	.getattr       = ntfs_getattr,
+	.update_time   = ntfs_update_time,
 };
 
 static long ntfs_generic_ioctl(struct file *filp,
@@ -195,8 +201,10 @@ static int ntfs_filldir(void *dirent, const ntfschar *name,
 		const int name_len, const int name_type, const s64 pos,
 		const MFT_REF mref, const unsigned dt_type)
 {
-	return dir_emit(dirent, (void *)name, name_len, MREF(mref), dt_type);
-
+	int ret;
+	ret = !dir_emit(dirent, (void *)name, name_len, MREF(mref), dt_type);
+	ntfs_log_debug("dir_emit %d\n", ret);
+	return ret;
 }
 
 static int __ntfs_readdir(struct file *filp, struct dir_context *ctx)
@@ -204,10 +212,13 @@ static int __ntfs_readdir(struct file *filp, struct dir_context *ctx)
 	struct inode *inode = file_inode(filp);
 	int ret;
 	loff_t cpos;
+	ntfs_log_debug("%s\n", __func__);
 	cpos = ctx->pos;
 
 	ret = ntfs_readdir(EXNTFS_I(inode), &cpos, ctx, ntfs_filldir);
-	ctx->pos = cpos;
+	if (!ret)
+		ctx->pos = cpos;
+	ntfs_log_debug("%s, ret=%d\n", __func__, ret);
 	return ret;
 }
 
@@ -238,8 +249,9 @@ static void print_hex(void *data, int len)
 
 static int ntfs_read_root(struct inode *inode)
 {
+//	inode->i_size = sle64_to_cpu(a->data.non_resident.data_size);
 	inode->i_mode = S_IFDIR;
-	inode->i_blocks = 30000;
+//	inode->i_blocks = 1;
 	inode->i_state = I_NEW;
 	inode->i_op = &ntfs_dir_inode_operations;
 	inode->i_fop = &ntfs_dir_operations;
@@ -255,6 +267,8 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	ntfs_volume *vol;
 	ntfs_inode *ni;
+	ntfs_attr_search_ctx *ctx;
+	ATTR_RECORD *a;
 	struct inode *root_inode = NULL;
 	int ret = -ENOMEM;
 
@@ -268,19 +282,36 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_max_links = 10000;
 
-	ni = ntfs_inode_open(vol, FILE_MFT);
+	ni = ntfs_inode_open(vol, FILE_root);
 	if (!ni)
 		goto error_exit;
 
-	ntfs_log_debug("%d\n", __LINE__);
+	ctx = ntfs_attr_get_search_ctx(ni, ni->mrec);
+	if (!ctx) {
+		ntfs_log_perror("ntfs_attr_get_search_ctx\n");
+		goto error_exit;
+	}
+
+	/* Find the index root attribute in the mft record. */
+	if (ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
+			0, ctx)) {
+		ntfs_log_perror("Index root attribute missing in directory inode "
+				"%lld", (unsigned long long)ni->mft_no);
+		goto error_exit;
+	}
+
+	a = ctx->attr;
+	ntfs_log_debug("%d, %d\n", __LINE__, a->non_resident);
 	root_inode = &ni->vfs_inode;
-	root_inode->i_ino = FILE_MFT;
 	inode_init_always(sb, root_inode);
+	root_inode->i_size = sle64_to_cpu(a->data_size);
+	root_inode->i_ino = FILE_root;
+	root_inode->i_blocks = ni->allocated_size >> 9;
 	inode_set_iversion(root_inode, 1);
 	INIT_LIST_HEAD(&root_inode->i_sb_list);
 	inode_sb_list_add(root_inode);
-
-	ntfs_log_debug("%d\n", __LINE__);
+	
+	ntfs_log_debug("%d, size=%llu\n", __LINE__, root_inode->i_size);
 	ret = ntfs_read_root(root_inode);
 	if (ret < 0)
 		goto error_exit;

@@ -372,7 +372,7 @@ u64 ntfs_inode_lookup_by_name(ntfs_inode *dir_ni,
 
 	/* Open the index allocation attribute. */
 	ia_na = ntfs_attr_open(dir_ni, AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4);
-	if (!ia_na) {
+	if (IS_ERR(ia_na)) {
 		ntfs_log_perror("Failed to open index allocation (inode %lld)",
 				(unsigned long long)dir_ni->mft_no);
 		goto put_err_out;
@@ -891,7 +891,7 @@ u32 ntfs_interix_types(ntfs_inode *ni)
 
 	dt_type = NTFS_DT_UNKNOWN;
 	na = ntfs_attr_open(ni, AT_DATA, NULL, 0);
-	if (na) {
+	if (!IS_ERR(na)) {
 		/*
 		 * Unrecognized patterns (eg HID + SYST for metadata)
 		 * are plain files or directories
@@ -1178,15 +1178,19 @@ int ntfs_readdir(ntfs_inode *dir_ni, s64 *pos,
 
 	/* Emulate . and .. for all directories. */
 	if (!*pos) {
+		ntfs_log_debug("");
 		rc = filldir(dirent, dotdot, 1, FILE_NAME_POSIX, *pos,
 				MK_MREF(dir_ni->mft_no,
 				le16_to_cpu(dir_ni->mrec->sequence_number)),
 				NTFS_DT_DIR);
-		if (rc)
+		if (rc) {
+			ntfs_log_debug("");
 			goto err_out;
+		}
 		++*pos;
 	}
 	if (*pos == 1) {
+		ntfs_log_debug("");
 		MFT_REF parent_mref;
 
 		parent_mref = ntfs_mft_get_parent_ref(dir_ni);
@@ -1284,7 +1288,7 @@ int ntfs_readdir(ntfs_inode *dir_ni, s64 *pos,
 	ctx = NULL;
 
 	/* If there is no index allocation attribute we are finished. */
-	if (!ia_na)
+	if (IS_ERR(ia_na))
 		goto EOD;
 
 	/* Advance *pos to the beginning of the index allocation. */
@@ -1292,7 +1296,7 @@ int ntfs_readdir(ntfs_inode *dir_ni, s64 *pos,
 
 skip_index_root:
 
-	if (!ia_na)
+	if (IS_ERR(ia_na))
 		goto done;
 
 	/* Allocate a buffer for the current index block. */
@@ -1301,7 +1305,7 @@ skip_index_root:
 		goto err_out;
 
 	bmp_na = ntfs_attr_open(dir_ni, AT_BITMAP, NTFS_INDEX_I30, 4);
-	if (!bmp_na) {
+	if (IS_ERR(bmp_na)) {
 		ntfs_log_perror("Failed to open index bitmap attribute");
 		goto dir_err_out;
 	}
@@ -1455,9 +1459,9 @@ err_out:
 		ntfs_attr_put_search_ctx(ctx);
 	free(ia);
 	free(bmp);
-	if (bmp_na)
+	if (!IS_ERR_OR_NULL(bmp_na))
 		ntfs_attr_close(bmp_na);
-	if (ia_na)
+	if (!IS_ERR_OR_NULL(ia_na))
 		ntfs_attr_close(ia_na);
 //	errno = eo;
 	return eo;
@@ -1810,18 +1814,18 @@ int ntfs_check_empty_dir(ntfs_inode *ni)
 		return 0;
 
 	na = ntfs_attr_open(ni, AT_INDEX_ROOT, NTFS_INDEX_I30, 4);
-	if (!na) {
-		errno = EIO;
+	if (IS_ERR(na)) {
+//		errno = EIO;
 		ntfs_log_perror("Failed to open directory");
-		return -1;
+		return -EIO;
 	}
 	
 	/* Non-empty directory? */
 	if ((na->data_size != sizeof(INDEX_ROOT) + sizeof(INDEX_ENTRY_HEADER))){
 		/* Both ENOTEMPTY and EEXIST are ok. We use the more common. */
-		errno = ENOTEMPTY;
+//		errno = ENOTEMPTY;
 		ntfs_log_debug("Directory is not empty\n");
-		ret = -1;
+		ret = -ENOTEMPTY;
 	}
 	
 	ntfs_attr_close(na);

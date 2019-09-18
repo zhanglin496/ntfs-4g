@@ -81,24 +81,27 @@ static int errno;
 const char *ntfs_home = 
 "News, support and information:  http://tuxera.com\n";
 
-static const char *invalid_ntfs_msg =
-"The device '%s' doesn't seem to have a valid NTFS.\n"
-"Maybe the wrong device is used? Or the whole disk instead of a\n"
-"partition (e.g. /dev/sda, not /dev/sda1)? Or the other way around?\n";
+//static const char *invalid_ntfs_msg =
+#define invalid_ntfs_msg \
+"The device '%s' doesn't seem to have a valid NTFS.\n" \
+"Maybe the wrong device is used? Or the whole disk instead of a\n" \
+"partition (e.g. /dev/sda, not /dev/sda1)? Or the other way around?\n"
 
-static const char *corrupt_volume_msg =
-"NTFS is either inconsistent, or there is a hardware fault, or it's a\n"
-"SoftRAID/FakeRAID hardware. In the first case run chkdsk /f on Windows\n"
-"then reboot into Windows twice. The usage of the /f parameter is very\n"
-"important! If the device is a SoftRAID/FakeRAID then first activate\n"
-"it and mount a different device under the /dev/mapper/ directory, (e.g.\n"
-"/dev/mapper/nvidia_eahaabcc1). Please see the 'dmraid' documentation\n"
-"for more details.\n";
+//static const char *corrupt_volume_msg =
+#define corrupt_volume_msg \
+"NTFS is either inconsistent, or there is a hardware fault, or it's a\n" \
+"SoftRAID/FakeRAID hardware. In the first case run chkdsk /f on Windows\n"\
+"then reboot into Windows twice. The usage of the /f parameter is very\n"\
+"important! If the device is a SoftRAID/FakeRAID then first activate\n"\
+"it and mount a different device under the /dev/mapper/ directory, (e.g.\n"\
+"/dev/mapper/nvidia_eahaabcc1). Please see the 'dmraid' documentation\n"\
+"for more details.\n"
 
-static const char *hibernated_volume_msg =
-"The NTFS partition is in an unsafe state. Please resume and shutdown\n"
-"Windows fully (no hibernation or fast restarting), or mount the volume\n"
-"read-only with the 'ro' mount option.\n";
+//static const char *hibernated_volume_msg =
+#define hibernated_volume_msg \
+"The NTFS partition is in an unsafe state. Please resume and shutdown\n"\
+"Windows fully (no hibernation or fast restarting), or mount the volume\n"\
+"read-only with the 'ro' mount option.\n"
 
 static const char *fallback_readonly_msg =
 "Falling back to read-only mount because the NTFS partition is in an\n"
@@ -120,10 +123,11 @@ static const char *fakeraid_msg =
 "/dev/mapper/, (e.g. /dev/mapper/nvidia_eahaabcc1) to mount NTFS.\n"
 "Please see the 'dmraid' documentation for help.\n";
 
-static const char *access_denied_msg =
-"Please check '%s' and the ntfs-3g binary permissions,\n"
-"and the mounting user ID. More explanation is provided at\n"
-"http://tuxera.com/community/ntfs-3g-faq/#unprivileged\n";
+//static const char *access_denied_msg =
+#define access_denied_msg \
+"Please check '%s' and the ntfs-3g binary permissions,\n"\
+"and the mounting user ID. More explanation is provided at\n"\
+"http://tuxera.com/community/ntfs-3g-faq/#unprivileged\n"
 
 /**
  * ntfs_volume_alloc - Create an NTFS volume object and initialise it

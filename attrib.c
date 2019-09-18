@@ -434,8 +434,10 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 		goto err_out;
 	}
 
-	if ((err = ntfs_attr_lookup(type, name, name_len, 0, 0, NULL, 0, ctx)))
+	if ((err = ntfs_attr_lookup(type, name, name_len, 0, 0, NULL, 0, ctx))) {
+		ntfs_log_error("err %d\n", err);
 		goto put_err_out;
+	}
 
 	a = ctx->attr;
 	
@@ -525,6 +527,8 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	}
 	ntfs_attr_put_search_ctx(ctx);
 out:
+	if (!na)
+		ntfs_log_error("open err %d\n", err);
 	ntfs_log_leave("\n");
 	return na ? : ERR_PTR(err);
 
