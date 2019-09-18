@@ -16,7 +16,10 @@
 #include <linux/uaccess.h>
 #include <linux/dax.h>
 #include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,20,0)
 #include <linux/iversion.h>
+#endif
 
 #include "super.h"
 
@@ -126,8 +129,7 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 		return d_splice_alias(&ni->vfs_inode, dentry);
 	}
 
-	return ERR_PTR(-EOPNOTSUPP);
-	return IS_ERR(ni) ? ERR_PTR(-EOPNOTSUPP) : ni;
+	return (void *)ni;
 }
 
 static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
@@ -258,9 +260,7 @@ static void print_hex(void *data, int len)
 
 static int ntfs_read_root(struct inode *inode)
 {
-//	inode->i_size = sle64_to_cpu(a->data.non_resident.data_size);
 	inode->i_mode = S_IFDIR;
-//	inode->i_blocks = 1;
 	inode->i_state = I_NEW;
 	inode->i_op = &ntfs_dir_inode_operations;
 	inode->i_fop = &ntfs_dir_operations;
