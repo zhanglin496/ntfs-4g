@@ -1998,7 +1998,7 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		 * we may need to split a hole. So reserve the entries
 		 * before it gets too late.
 		 */ 
-		eo = -ENOMEM
+		eo = -ENOMEM;
 		if (compressed) {
 			na->rl = ntfs_rl_extend(na,na->rl,2);
 			if (!na->rl)
@@ -2458,7 +2458,7 @@ int ntfs_attr_pclose(ntfs_attr *na)
 		 * However, we have already written the last byte uncompressed,
 		 * so getting this here must be an error of some kind.
 		 */
-		eo = PTR_ERR(eo);
+		eo = PTR_ERR(rl);
 		if (eo == -ENOENT) {
 			eo = -EIO;
 			ntfs_log_perror("%s: Failed to find VCN #5", __FUNCTION__);
@@ -2499,7 +2499,7 @@ int ntfs_attr_pclose(ntfs_attr *na)
 	if (rl->lcn == LCN_RL_NOT_MAPPED) {
 		rl = ntfs_attr_find_vcn(na, rl->vcn);
 		if (IS_ERR(rl)) {
-			eo = PTR_ERR(eo);
+			eo = PTR_ERR(rl);
 			if (eo == -ENOENT) {
 				eo = -EIO;
 				ntfs_log_perror("%s: Failed to find VCN"

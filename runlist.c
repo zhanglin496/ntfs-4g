@@ -297,7 +297,7 @@ static runlist_element *ntfs_rl_insert(runlist_element *dst, int dsize,
 	if (!dst || !src) {
 		ntfs_log_debug("Eeek. ntfs_rl_insert() invoked with NULL "
 				"pointer!\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);;
 	}
 
@@ -396,7 +396,7 @@ static runlist_element *ntfs_rl_replace(runlist_element *dst, int dsize,
 	if (!dst || !src) {
 		ntfs_log_debug("Eeek. ntfs_rl_replace() invoked with NULL "
 				"pointer!\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -476,7 +476,7 @@ static runlist_element *ntfs_rl_split(runlist_element *dst, int dsize,
 {
 	if (!dst || !src) {
 		ntfs_log_debug("Eeek. ntfs_rl_split() invoked with NULL pointer!\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);;
 	}
 
@@ -555,7 +555,7 @@ static runlist_element *ntfs_runlists_merge_i(runlist_element *drl,
 
 	/* Can't have an entirely unmapped source runlist. */
 	if (!srl[si].length) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: unmapped source runlist", __FUNCTION__);
 		return ERR_PTR(-EINVAL);
 	}
@@ -577,7 +577,7 @@ static runlist_element *ntfs_runlists_merge_i(runlist_element *drl,
 	/* Sanity check for illegal overlaps. */
 	if ((drl[di].vcn == srl[si].vcn) && (drl[di].lcn >= 0) &&
 			(srl[si].lcn >= 0)) {
-		errno = ERANGE;
+//		errno = ERANGE;
 		ntfs_log_perror("Run lists overlap. Cannot merge");
 		return ERR_PTR(-ERANGE);
 	}
@@ -801,7 +801,7 @@ static runlist_element *ntfs_mapping_pairs_decompress_i(const ntfs_volume *vol,
 	/* Make sure attr exists and is non-resident. */
 	if (!attr || !attr->non_resident ||
 			sle64_to_cpu(attr->lowest_vcn) < (VCN)0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return NULL;
 	}
 	/* Start at vcn = lowest_vcn and lcn 0. */
@@ -812,7 +812,7 @@ static runlist_element *ntfs_mapping_pairs_decompress_i(const ntfs_volume *vol,
 	attr_end = (const u8*)attr + le32_to_cpu(attr->length);
 	if (buf < (const u8*)attr || buf > attr_end) {
 		ntfs_log_debug("Corrupt attribute.\n");
-		errno = EIO;
+//		errno = EIO;
 		return NULL;
 	}
 	/* Current position in runlist array. */
@@ -840,9 +840,9 @@ static runlist_element *ntfs_mapping_pairs_decompress_i(const ntfs_volume *vol,
 			rlsize += 0x1000;
 			rl2 = ntfs_realloc(rl, rlsize);
 			if (!rl2) {
-				int eo = errno;
+//				int eo = errno;
 				free(rl);
-				errno = eo;
+//				errno = eo;
 				return NULL;
 			}
 			rl = rl2;
@@ -998,16 +998,16 @@ mpa_err:
 	old_rl = ntfs_runlists_merge(old_rl, rl);
 	if (old_rl)
 		return old_rl;
-	err = errno;
+//	err = errno;
 	free(rl);
 	ntfs_log_debug("Failed to merge runlists.\n");
-	errno = err;
+//	errno = err;
 	return NULL;
 io_error:
 	ntfs_log_debug("Corrupt attribute.\n");
 err_out:
 	free(rl);
-	errno = EIO;
+//	errno = EIO;
 	return NULL;
 }
 
@@ -1193,10 +1193,10 @@ s64 ntfs_rl_pwrite(const ntfs_volume *vol, const runlist_element *rl,
 		s64 ofs, const s64 pos, s64 count, void *b)
 {
 	s64 written, to_write, total = 0;
-	int err = EIO;
+	int err = -EIO;
 
 	if (!vol || !rl || pos < 0 || count < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("Failed to write runlist [vol: %p rl: %p "
 				"pos: %lld count: %lld]", vol, rl,
 				(long long)pos, (long long)count);
@@ -1246,10 +1246,10 @@ retry:
 			continue;
 		}
 		/* If the syscall was interrupted, try again. */
-		if (written == (s64)-1 && errno == EINTR)
-			goto retry;
-		if (written == (s64)-1)
-			err = errno;
+//		if (written == (s64)-1 && errno == EINTR)
+//			goto retry;
+//		if (written == (s64)-1)
+//			err = errno;
 		goto rl_err_out;
 	}
 out:
@@ -1257,9 +1257,9 @@ out:
 rl_err_out:
 	if (total)
 		goto out;
-	errno = err;
+//	errno = err;
 errno_set:
-	total = -1;
+	total = err;
 	goto out;
 }
 
@@ -1444,8 +1444,8 @@ int ntfs_write_significant_bytes(u8 *dst, const u8 *dst_max, const s64 n)
 	}
 	return i;
 err_out:
-	errno = ENOSPC;
-	return -1;
+//	errno = ENOSPC;
+	return -ENOSPC;
 }
 
 /**
@@ -1714,20 +1714,21 @@ int ntfs_rl_sparse(runlist *rl)
 	runlist *rlc;
 
 	if (!rl) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: ", __FUNCTION__);
-		return -1;
+		return -EINVAL;
 	}
 
-	for (rlc = rl; rlc->length; rlc++)
+	for (rlc = rl; rlc->length; rlc++) {
 		if (rlc->lcn < 0) {
 			if (rlc->lcn != LCN_HOLE) {
-				errno = EINVAL;
+//				errno = EINVAL;
 				ntfs_log_perror("%s: bad runlist", __FUNCTION__);
-				return -1;
+				return -EINVAL;
 			}
 			return 1;
 		}
+	}
 	return 0;
 }
 
@@ -1744,17 +1745,17 @@ s64 ntfs_rl_get_compressed_size(ntfs_volume *vol, runlist *rl)
 	s64 ret = 0;
 
 	if (!rl) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: ", __FUNCTION__);
-		return -1;
+		return -EINVAL;
 	}
 
 	for (rlc = rl; rlc->length; rlc++) {
 		if (rlc->lcn < 0) {
 			if (rlc->lcn != LCN_HOLE) {
-				errno = EINVAL;
+//				errno = EINVAL;
 				ntfs_log_perror("%s: bad runlist", __FUNCTION__);
-				return -1;
+				return -EINVAL;
 			}
 		} else
 			ret += rlc->length;
