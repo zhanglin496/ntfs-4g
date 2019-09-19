@@ -740,10 +740,10 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		}
 #endif
 		ni = ntfs_inode_open(vol, FILE_root);
-		if (!ni) {
+		if (IS_ERR(ni)) {
 			ntfs_log_debug("Couldn't open the inode of the root "
 					"directory.\n");
-			err = EIO;
+			err = -EIO;
 			result = (ntfs_inode*)NULL;
 			goto out;
 		}
@@ -807,13 +807,14 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		}
 		inum = ntfs_inode_lookup_by_name(ni, unicode, len);
 #endif
-		if (inum == (u64) -1) {
+		if ((s64)inum == (s64) -ENOENT) {
 			ntfs_log_debug("Couldn't find name '%s' in pathname "
 					"'%s'.\n", p, pathname);
 			err = -ENOENT;
 			goto close;
 		}
-
+		if ((s64)inum < 0)
+			goto close;
 		if (ni != parent)
 			if (ntfs_inode_close(ni)) {
 				err = errno;
@@ -822,7 +823,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 
 		inum = MREF(inum);
 		ni = ntfs_inode_open(vol, inum);
-		if (!ni) {
+		if (IS_ERR(ni)) {
 			ntfs_log_debug("Cannot open inode %llu: %s.\n",
 					(unsigned long long)inum, p);
 			err = -EIO;
@@ -941,7 +942,7 @@ static u32 ntfs_dir_entry_type(ntfs_inode *dir_ni, MFT_REF mref,
 
 	dt_type = NTFS_DT_UNKNOWN;
 	ni = ntfs_inode_open(dir_ni->vol, mref);
-	if (ni) {
+	if (!IS_ERR(ni)) {
 		if ((attributes & FILE_ATTR_REPARSE_POINT)
 		    && ntfs_possible_symlink(ni))
 			dt_type = NTFS_DT_LNK;
@@ -1081,8 +1082,8 @@ static MFT_REF ntfs_mft_get_parent_ref(ntfs_inode *ni)
 
 	ntfs_log_trace("Entering.\n");
 	
-	if (!ni) {
-		errno = EINVAL;
+	if (IS_ERR_OR_NULL(ni)) {
+//		errno = EINVAL;
 		return ERR_MREF(-1);
 	}
 
@@ -1111,11 +1112,12 @@ static MFT_REF ntfs_mft_get_parent_ref(ntfs_inode *ni)
 	ntfs_attr_put_search_ctx(ctx);
 	return mref;
 io_err_out:
-	errno = EIO;
+	eo = -EIO;
+//	errno = EIO;
 err_out:
-	eo = errno;
+//	eo = errno;
 	ntfs_attr_put_search_ctx(ctx);
-	errno = eo;
+//	errno = eo;
 	return ERR_MREF(-1);
 }
 
@@ -1455,9 +1457,9 @@ EOD:
 done:
 	free(ia);
 	free(bmp);
-	if (bmp_na)
+	if (!IS_ERR_OR_NULL(bmp_na))
 		ntfs_attr_close(bmp_na);
-	if (ia_na)
+	if (!IS_ERR_OR_NULL(ia_na))
 		ntfs_attr_close(ia_na);
 	ntfs_log_debug("EOD, *pos 0x%llx, returning 0.\n", (long long)*pos);
 	return 0;
@@ -1526,18 +1528,18 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	/* Sanity checks. */
 	if (!dir_ni || !name || !name_len) {
 		ntfs_log_error("Invalid arguments.\n");
-		errno = EINVAL;
-		return NULL;
+//		errno = EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 	
 	if (dir_ni->flags & FILE_ATTR_REPARSE_POINT) {
-		errno = EOPNOTSUPP;
-		return NULL;
+//		errno = EOPNOTSUPP;
+		return ERR_PTR(-EOPNOTSUPP);
 	}
 	
 	ni = ntfs_mft_record_alloc(dir_ni->vol, NULL);
 	if (!ni)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 #if CACHE_NIDATA_SIZE
 	ntfs_inode_invalidate(dir_ni->vol, ni->mft_no);
 #endif
@@ -1552,7 +1554,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 		si_len = offsetof(STANDARD_INFORMATION, v1_end);
 	si = ntfs_calloc(si_len);
 	if (!si) {
-		err = errno;
+		err = -ENOMEM;;
 		goto err_out;
 	}
 	si->creation_time = ni->creation_time;
@@ -1615,7 +1617,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 		ir_len = offsetof(INDEX_ROOT, index) + index_len;
 		ir = ntfs_calloc(ir_len);
 		if (!ir) {
-			err = errno;
+			err = -ENOMEM;
 			goto err_out;
 		}
 		ir->type = AT_FILE_NAME;
@@ -1670,7 +1672,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 						target_len * sizeof(ntfschar);
 				data = ntfs_malloc(data_len);
 				if (!data) {
-					err = errno;
+					err = -ENOMEM;
 					goto err_out;
 				}
 				data->magic = INTX_SYMBOLIC_LINK;
@@ -1701,7 +1703,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	fn_len = sizeof(FILE_NAME_ATTR) + name_len * sizeof(ntfschar);
 	fn = ntfs_calloc(fn_len);
 	if (!fn) {
-		err = errno;
+		err = -ENOMEM;
 		goto err_out;
 	}
 	fn->parent_directory = MK_LE_MREF(dir_ni->mft_no,
@@ -1765,7 +1767,7 @@ err_out:
 	 */
 	while (ni->nr_extents)
 		if (ntfs_mft_record_free(ni->vol, *(ni->extent_nis))) {
-			err = errno;
+//			err = errno;
 			ntfs_log_error("Failed to free extent MFT record.  "
 					"Leaving inconsistent metadata.\n");
 		}
@@ -1774,8 +1776,8 @@ err_out:
 				"Leaving inconsistent metadata. Run chkdsk.\n");
 	free(fn);
 	free(si);
-	errno = err;
-	return NULL;
+//	errno = err;
+	return ERR_PTR(err);
 }
 
 /**

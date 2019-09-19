@@ -3588,10 +3588,10 @@ int ntfs_attr_size_bounds_check(const ntfs_volume *vol, const ATTR_TYPES type,
 	s64 min_size, max_size;
 
 	if (size < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: size=%lld", __FUNCTION__,
 				(long long)size);
-		return -1;
+		return -EINVAL;
 	}
 
 	/*
@@ -3599,14 +3599,14 @@ int ntfs_attr_size_bounds_check(const ntfs_volume *vol, const ATTR_TYPES type,
 	 * Windows would crash. This is not listed in the AttrDef.
 	 */
 	if (type == AT_ATTRIBUTE_LIST && size > 0x40000) {
-		errno = ERANGE;
+//		errno = ERANGE;
 		ntfs_log_perror("Too large attrlist (%lld)", (long long)size);
-		return -1;
+		return -ERANGE;
 	}
 
 	ad = ntfs_attr_find_in_attrdef(vol, type);
 	if (!ad)
-		return -1;
+		return -ENOMEM;
 	
 	min_size = sle64_to_cpu(ad->min_size);
 	max_size = sle64_to_cpu(ad->max_size);
@@ -3621,11 +3621,11 @@ int ntfs_attr_size_bounds_check(const ntfs_volume *vol, const ATTR_TYPES type,
 	
 	if ((min_size && (size < min_size)) || 
 	    ((max_size > 0) && (size > max_size))) {
-		errno = ERANGE;
+//		errno = ERANGE;
 		ntfs_log_perror("Attr type %d size check failed (min,size,max="
 			"%lld,%lld,%lld)", le32_to_cpu(type), (long long)min_size,
 			(long long)size, (long long)max_size);
-		return -1;
+		return -ERANGE;
 	}
 	return 0;
 }
