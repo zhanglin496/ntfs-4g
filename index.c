@@ -48,7 +48,7 @@
 #include "reparse.h"
 #include "misc.h"
 
-static int errno;
+//static int errno;
 
 /**
  * ntfs_index_entry_mark_dirty - mark an index entry dirty
@@ -126,7 +126,7 @@ ntfs_index_context *ntfs_index_ctx_get(ntfs_inode *ni,
 	ntfs_log_trace("Entering\n");
 	
 	if (!ni) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return NULL;
 	}
 	if (ni->nr_extents == -1)
@@ -429,6 +429,7 @@ static int ntfs_ia_check(ntfs_index_context *icx, INDEX_BLOCK *ib, VCN vcn)
 static INDEX_ROOT *ntfs_ir_lookup(ntfs_inode *ni, ntfschar *name,
 				  u32 name_len, ntfs_attr_search_ctx **ctx)
 {
+	int ret;
 	ATTR_RECORD *a;
 	INDEX_ROOT *ir = NULL;
 
@@ -436,24 +437,26 @@ static INDEX_ROOT *ntfs_ir_lookup(ntfs_inode *ni, ntfschar *name,
 	
 	*ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!*ctx)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	
-	if (ntfs_attr_lookup(AT_INDEX_ROOT, name, name_len, CASE_SENSITIVE, 
-			     0, NULL, 0, *ctx)) {
+	if ((ret = ntfs_attr_lookup(AT_INDEX_ROOT, name, name_len, CASE_SENSITIVE, 
+			     0, NULL, 0, *ctx))) {
+		ir = ERR_PTR(ret);
 		ntfs_log_perror("Failed to lookup $INDEX_ROOT");
 		goto err_out;
 	}
 	
 	a = (*ctx)->attr;
 	if (a->non_resident) {
-		errno = EINVAL;
+//		errno = EINVAL;
+		ir = ERR_PTR(-EINVAL);
 		ntfs_log_perror("Non-resident $INDEX_ROOT detected");
 		goto err_out;
 	}
 	
 	ir = (INDEX_ROOT *)((char *)a + le16_to_cpu(a->value_offset));
 err_out:
-	if (!ir) {
+	if (IS_ERR(ir)) {
 		ntfs_attr_put_search_ctx(*ctx);
 		*ctx = NULL;
 	}
@@ -466,7 +469,7 @@ static INDEX_ROOT *ntfs_ir_lookup2(ntfs_inode *ni, ntfschar *name, u32 len)
 	INDEX_ROOT *ir;
 
 	ir = ntfs_ir_lookup(ni, name, len, &ctx);
-	if (ir)
+	if (!IS_ERR(ir))
 		ntfs_attr_put_search_ctx(ctx);
 	return ir;
 }
@@ -503,7 +506,7 @@ static int ntfs_ie_lookup(const void *key, const int key_len,
 		/* Bounds checks. */
 		if ((u8 *)ie + sizeof(INDEX_ENTRY_HEADER) > index_end ||
 		    (u8 *)ie + le16_to_cpu(ie->length) > index_end) {
-			errno = ERANGE;
+//			errno = ERANGE;
 			ntfs_log_error("Index entry out of bounds in inode "
 				       "%llu.\n",
 				       (unsigned long long)icx->ni->mft_no);
@@ -521,7 +524,7 @@ static int ntfs_ie_lookup(const void *key, const int key_len,
 		 */
 		if (!icx->collate) {
 			ntfs_log_error("Collation function not defined\n");
-			errno = EOPNOTSUPP;
+//			errno = EOPNOTSUPP;
 			return STATUS_ERROR;
 		}
 		rc = icx->collate(icx->ni->vol, key, key_len,
@@ -529,7 +532,7 @@ static int ntfs_ie_lookup(const void *key, const int key_len,
 		if (rc == NTFS_COLLATION_ERROR) {
 			ntfs_log_error("Collation error. Perhaps a filename "
 				       "contains invalid characters?\n");
-			errno = ERANGE;
+//			errno = ERANGE;
 			return STATUS_ERROR;
 		}
 		/*
@@ -542,7 +545,7 @@ static int ntfs_ie_lookup(const void *key, const int key_len,
 		
 		if (!rc) {
 			*ie_out = ie;
-			errno = 0;
+//			errno = 0;
 			icx->parent_pos[icx->pindex] = item;
 			return STATUS_OK;
 		}
@@ -557,14 +560,14 @@ static int ntfs_ie_lookup(const void *key, const int key_len,
 	if (!(ie->ie_flags & INDEX_ENTRY_NODE)) {
 		ntfs_log_debug("Index entry wasn't found.\n");
 		*ie_out = ie;
-		errno = ENOENT;
+//		errno = ENOENT;
 		return STATUS_NOT_FOUND;
 	}
 	
 	/* Get the starting vcn of the index_block holding the child node. */
 	*vcn = ntfs_ie_get_vcn(ie);
 	if (*vcn < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("Negative vcn in inode %llu",
 			       	(unsigned long long)icx->ni->mft_no);
 		return STATUS_ERROR;
@@ -581,10 +584,10 @@ static ntfs_attr *ntfs_ia_open(ntfs_index_context *icx, ntfs_inode *ni)
 	ntfs_attr *na;
 	
 	na = ntfs_attr_open(ni, AT_INDEX_ALLOCATION, icx->name, icx->name_len);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open index allocation of inode "
 				"%llu", (unsigned long long)ni->mft_no);
-		return NULL;
+//		return NULL;
 	}
 	
 	return na;
@@ -618,7 +621,7 @@ static int ntfs_icx_parent_inc(ntfs_index_context *icx)
 {
 	icx->pindex++;
 	if (icx->pindex >= MAX_PARENT_VCN) {
-		errno = EOPNOTSUPP;
+//		errno = EOPNOTSUPP;
 		ntfs_log_perror("Index is over %d level deep", MAX_PARENT_VCN);
 		return STATUS_ERROR;
 	}
@@ -629,7 +632,7 @@ static int ntfs_icx_parent_dec(ntfs_index_context *icx)
 {
 	icx->pindex--;
 	if (icx->pindex < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("Corrupt index pointer (%d)", icx->pindex);
 		return STATUS_ERROR;
 	}
@@ -680,21 +683,22 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 	ntfs_log_trace("Entering\n");
 	
 	if (!key || key_len <= 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("key: %p  key_len: %d", key, key_len);
-		return -1;
+		return -EINVAL;
 	}
 
 	ir = ntfs_ir_lookup(ni, icx->name, icx->name_len, &icx->actx);
-	if (!ir) {
-		if (errno == ENOENT)
-			errno = EIO;
-		return -1;
+	if (IS_ERR(ir)) {
+		if (err == -ENOENT)
+			err = -EIO;
+		return err;
 	}
 	
 	icx->block_size = le32_to_cpu(ir->index_block_size);
 	if (icx->block_size < NTFS_BLOCK_SIZE) {
-		errno = EINVAL;
+//		errno = EINVAL;
+		err = -EINVAL;
 		ntfs_log_perror("Index block size (%d) is smaller than the "
 				"sector size (%d)", icx->block_size, NTFS_BLOCK_SIZE);
 		goto err_out;
@@ -707,7 +711,8 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 			/* get the appropriate collation function */
 	icx->collate = ntfs_get_collate_function(ir->collation_rule);
 	if (!icx->collate) {
-		err = errno = EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+//		err = errno = EOPNOTSUPP;
 		ntfs_log_perror("Unknown collation rule 0x%x", 
 				(unsigned)le32_to_cpu(ir->collation_rule));
 		goto err_out;
@@ -720,7 +725,8 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 	 */
 	ret = ntfs_ie_lookup(key, key_len, icx, &ir->index, &vcn, &ie);
 	if (ret == STATUS_ERROR) {
-		err = errno;
+//		err = errno;
+		err = -ERANGE;
 		goto err_lookup;
 	}
 	
@@ -728,7 +734,11 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 	
 	if (ret != STATUS_KEEP_SEARCHING) {
 		/* STATUS_OK or STATUS_NOT_FOUND */
-		err = errno;
+//		err = ret;
+		if (ret == STATUS_NOT_FOUND)
+			err = -ENOENT;;
+		else
+			err = 0;
 		icx->is_in_root = TRUE;
 		icx->parent_vcn[icx->pindex] = old_vcn;
 		goto done;
@@ -737,12 +747,14 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 	/* Child node present, descend into it. */
 	
 	icx->ia_na = ntfs_ia_open(icx, ni);
-	if (!icx->ia_na)
+	if (IS_ERR(icx->ia_na)) {
+		err = PTR_ERR(icx->ia_na);
 		goto err_out;
+	}
 	
 	ib = ntfs_malloc(icx->block_size);
 	if (!ib) {
-		err = errno;
+		err = -ENOMEM;
 		goto err_out;
 	}
 	
@@ -750,22 +762,25 @@ descend_into_child_node:
 
 	icx->parent_vcn[icx->pindex] = old_vcn;
 	if (ntfs_icx_parent_inc(icx)) {
-		err = errno;
+		err = -EOPNOTSUPP;
 		goto err_out;
 	}
 	old_vcn = vcn;
 
 	ntfs_log_debug("Descend into node with VCN %lld\n", (long long)vcn);
 	
-	if (ntfs_ib_read(icx, vcn, ib))
+	if ((err = ntfs_ib_read(icx, vcn, ib)))
 		goto err_out;
 	
 	ret = ntfs_ie_lookup(key, key_len, icx, &ib->index, &vcn, &ie);
 	if (ret != STATUS_KEEP_SEARCHING) {
-		err = errno;
+//		err = ret;
 		if (ret == STATUS_ERROR)
 			goto err_out;
-		
+		if (ret == STATUS_NOT_FOUND)
+			err = -ENOENT;
+		else
+			err = 0;
 		/* STATUS_OK or STATUS_NOT_FOUND */
 		icx->is_in_root = FALSE;
 		icx->ib = ib;
@@ -777,6 +792,7 @@ descend_into_child_node:
 		ntfs_log_error("Index entry with child node found in a leaf "
 			       "node in inode 0x%llx.\n",
 			       (unsigned long long)ni->mft_no);
+		err = -ENOENT;
 		goto err_out;
 	}
 	
@@ -786,19 +802,19 @@ err_out:
 err_lookup:
 	free(ib);
 	if (!err)
-		err = EIO;
-	errno = err;
-	return -1;
+		err = -EIO;
+//	errno = err;
+	return err;
 done:
 	icx->entry = ie;
 	icx->data = (u8 *)ie + offsetof(INDEX_ENTRY, key);
 	icx->data_len = le16_to_cpu(ie->key_length);
 	ntfs_log_trace("Done.\n");
-	if (err) {
-		errno = err;
-		return -1;
-	}
-	return 0;
+//	if (err) {
+//		errno = err;
+//		return -1;
+//	}
+	return err;
 
 }
 
@@ -1132,7 +1148,7 @@ static int ntfs_ir_reparent(ntfs_index_context *icx)
 	ntfs_log_trace("Entering\n");
 	
 	ir = ntfs_ir_lookup2(icx->ni, icx->name, icx->name_len);
-	if (!ir)
+	if (IS_ERR(ir))
 		goto out;
 	
 	if ((ir->index.ih_flags & NODE_MASK) == SMALL_INDEX)
@@ -1158,7 +1174,7 @@ static int ntfs_ir_reparent(ntfs_index_context *icx)
 	
 retry :
 	ir = ntfs_ir_lookup(icx->ni, icx->name, icx->name_len, &ctx);
-	if (!ir)
+	if (IS_ERR(ir))
 		goto clear_bmp;
 	
 	ntfs_ir_nill(ir);
@@ -1456,6 +1472,7 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 {
 	INDEX_HEADER *ih;
 	int allocated_size, new_size;
+	int err;
 	int ret = STATUS_ERROR;
 	
 #ifdef DEBUG
@@ -1469,12 +1486,12 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 	
 	while (1) {
 				
-		if (!ntfs_index_lookup(&ie->key, le16_to_cpu(ie->key_length), icx)) {
-			errno = EEXIST;
+		if (!(err = ntfs_index_lookup(&ie->key, le16_to_cpu(ie->key_length), icx))) {
+//			errno = EEXIST;
 			ntfs_log_perror("Index already have such entry");
 			goto err_out;
 		}
-		if (errno != ENOENT) {
+		if (err != -ENOENT) {
 			ntfs_log_perror("Failed to find place for new entry");
 			goto err_out;
 		}
@@ -1902,7 +1919,7 @@ INDEX_ROOT *ntfs_index_root_get(ntfs_inode *ni, ATTR_RECORD *attr)
 
 	name = (ntfschar *)((u8 *)attr + le16_to_cpu(attr->name_offset));
 
-	if (!ntfs_ir_lookup(ni, name, attr->name_length, &ctx))
+	if (IS_ERR(ntfs_ir_lookup(ni, name, attr->name_length, &ctx)))
 		return NULL;
 	
 	root = ntfs_malloc(sizeof(INDEX_ROOT));
@@ -1986,12 +2003,14 @@ static INDEX_ENTRY *ntfs_index_walk_up(INDEX_ENTRY *ie,
 				ictx->ir = ntfs_ir_lookup(ictx->ni,
 					ictx->name, ictx->name_len,
 					&ictx->actx);
-				if (ictx->ir)
+				if (!IS_ERR(ictx->ir))
 					entry = ntfs_ie_get_by_pos(
 						&ictx->ir->index,
 						ictx->parent_pos[ictx->pindex]);
-				else
+				else {
+					ictx->ir = NULL;
 					entry = (INDEX_ENTRY*)NULL;
+				}
 			} else {
 					/* up into non-root node */
 				vcn = ictx->parent_vcn[ictx->pindex];

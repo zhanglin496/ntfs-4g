@@ -82,7 +82,7 @@
 #include "misc.h"
 
 
-static int errno;
+//static int errno;
 #define strdup(x) kstrdup(x, GFP_KERNEL)
 
 #if defined(linux) && defined(_IO) && !defined(BLKGETSIZE)
@@ -125,16 +125,16 @@ struct ntfs_device *ntfs_device_alloc(const char *name, const long state,
 	struct ntfs_device *dev;
 
 	if (!name) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return NULL;
 	}
 
 	dev = ntfs_malloc(sizeof(struct ntfs_device));
 	if (dev) {
 		if (!(dev->d_name = strdup(name))) {
-			int eo = errno;
+//			int eo = errno;
 			free(dev);
-			errno = eo;
+//			errno = eo;
 			return NULL;
 		}
 		dev->d_ops = dops;
@@ -160,11 +160,11 @@ struct ntfs_device *ntfs_device_alloc(const char *name, const long state,
 int ntfs_device_free(struct ntfs_device *dev)
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (NDevOpen(dev)) {
-		errno = EBUSY;
+//		errno = EBUSY;
 		return -1;
 	}
 	free(dev->d_name);
@@ -301,13 +301,13 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
 
 	if (!b || count < 0 || pos < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		goto out;
 	}
 	if (!count)
 		return 0;
 	if (NDevReadOnly(dev)) {
-		errno = EROFS;
+//		errno = EROFS;
 		goto out;
 	}
 	
@@ -372,7 +372,7 @@ s64 ntfs_mst_pread(struct ntfs_device *dev, const s64 pos, s64 count,
 	s64 br, i;
 
 	if (bksize & (bksize - 1) || bksize % NTFS_BLOCK_SIZE) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	/* Do the read. */
@@ -429,7 +429,7 @@ s64 ntfs_mst_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	s64 written, i;
 
 	if (count < 0 || bksize % NTFS_BLOCK_SIZE) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (!count)
@@ -476,11 +476,11 @@ s64 ntfs_cluster_read(const ntfs_volume *vol, const s64 lcn, const s64 count,
 	s64 br;
 
 	if (!vol || lcn < 0 || count < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (vol->nr_clusters < lcn + count) {
-		errno = ESPIPE;
+//		errno = ESPIPE;
 		ntfs_log_perror("Trying to read outside of volume "
 				"(%lld < %lld)", (long long)vol->nr_clusters,
 			        (long long)lcn + count);
@@ -512,11 +512,11 @@ s64 ntfs_cluster_write(const ntfs_volume *vol, const s64 lcn,
 	s64 bw;
 
 	if (!vol || lcn < 0 || count < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (vol->nr_clusters < lcn + count) {
-		errno = ESPIPE;
+//		errno = ESPIPE;
 		ntfs_log_perror("Trying to write outside of volume "
 				"(%lld < %lld)", (long long)vol->nr_clusters,
 			        (long long)lcn + count);
@@ -571,7 +571,7 @@ s64 ntfs_device_size_get(struct ntfs_device *dev, int block_size)
 	s64 high, low;
 
 	if (!dev || block_size <= 0 || (block_size - 1) & block_size) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 #ifdef BLKGETSIZE64
@@ -670,7 +670,7 @@ s64 ntfs_device_size_get(struct ntfs_device *dev, int block_size)
 s64 ntfs_device_partition_start_sector_get(struct ntfs_device *dev)
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 #ifdef HDIO_GETGEO
@@ -683,7 +683,7 @@ s64 ntfs_device_partition_start_sector_get(struct ntfs_device *dev)
 		}
 	}
 #else
-	errno = EOPNOTSUPP;
+//	errno = EOPNOTSUPP;
 #endif
 	return -1;
 }
@@ -693,7 +693,7 @@ static int ntfs_device_get_geo(struct ntfs_device *dev)
 	int err;
 
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	err = EOPNOTSUPP;
@@ -807,10 +807,10 @@ skip_hd:
 					dev->d_sectors_per_track);
 			return 0;
 		}
-		err = errno;
+//		err = errno;
 	}
 #endif
-	errno = err;
+//	errno = err;
 	return -1;
 }
 
@@ -830,14 +830,14 @@ skip_hd:
 int ntfs_device_heads_get(struct ntfs_device *dev)
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (dev->d_heads == -1) {
 		if (ntfs_device_get_geo(dev) == -1)
 			return -1;
 		if (dev->d_heads == -1) {
-			errno = EINVAL;
+//			errno = EINVAL;
 			return -1;
 		}
 	}
@@ -860,14 +860,14 @@ int ntfs_device_heads_get(struct ntfs_device *dev)
 int ntfs_device_sectors_per_track_get(struct ntfs_device *dev)
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	if (dev->d_sectors_per_track == -1) {
 		if (ntfs_device_get_geo(dev) == -1)
 			return -1;
 		if (dev->d_sectors_per_track == -1) {
-			errno = EINVAL;
+//			errno = EINVAL;
 			return -1;
 		}
 	}
@@ -889,7 +889,7 @@ int ntfs_device_sectors_per_track_get(struct ntfs_device *dev)
 int ntfs_device_sector_size_get(struct ntfs_device *dev)
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 #ifdef BLKSSZGET
@@ -925,7 +925,7 @@ int ntfs_device_sector_size_get(struct ntfs_device *dev)
 		}
 	}
 #else
-	errno = EOPNOTSUPP;
+//	errno = EOPNOTSUPP;
 #endif
 	return -1;
 }
@@ -947,7 +947,7 @@ int ntfs_device_block_size_set(struct ntfs_device *dev,
 		int block_size __attribute__((unused)))
 {
 	if (!dev) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 #ifdef BLKBSZSET
@@ -966,7 +966,7 @@ int ntfs_device_block_size_set(struct ntfs_device *dev,
 	/* If not a block device, pretend it was successful. */
 	if (!NDevBlock(dev))
 		return 0;
-	errno = EOPNOTSUPP;
+//	errno = EOPNOTSUPP;
 #endif
 	return -1;
 }
