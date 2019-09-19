@@ -736,7 +736,7 @@ int ntfs_index_lookup(const void *key, const int key_len, ntfs_index_context *ic
 		/* STATUS_OK or STATUS_NOT_FOUND */
 //		err = ret;
 		if (ret == STATUS_NOT_FOUND)
-			err = -ENOENT;;
+			err = -ENOENT;
 		else
 			err = 0;
 		icx->is_in_root = TRUE;
@@ -815,7 +815,6 @@ done:
 //		return -1;
 //	}
 	return err;
-
 }
 
 static INDEX_BLOCK *ntfs_ib_alloc(VCN ib_vcn, u32 ib_size, 
@@ -1549,7 +1548,7 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 	
 	if (!ni || !fn) {
 		ntfs_log_error("Invalid arguments.\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -1;
 	}
 	
@@ -1571,9 +1570,9 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 		goto out;
 	
 	ret = ntfs_ie_add(icx, ie);
-	err = errno;
+//	err = errno;
 	ntfs_index_ctx_put(icx);
-	errno = err;
+//	errno = err;
 out:
 	free(ie);
 	return ret;
@@ -1743,7 +1742,7 @@ descend:
 		goto descend;
 
 	if (ntfs_ih_zero_entry(&ib->index)) {
-		errno = EIO;
+//		errno = EIO;
 		ntfs_log_perror("Empty index block");
 		goto out;
 	}
@@ -1829,7 +1828,7 @@ int ntfs_index_rm(ntfs_index_context *icx)
 	
 	if (!icx || (!icx->ib && !icx->ir) || ntfs_ie_end(icx->entry)) {
 		ntfs_log_error("Invalid arguments.\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		goto err_out;
 	}
 	if (icx->is_in_root)
