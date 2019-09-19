@@ -121,10 +121,10 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 	int bit, firstbyte, lastbyte, lastbyte_pos, tmp, ret = -1;
 
 	if (!na || start_bit < 0 || count < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: Invalid argument (%p, %lld, %lld)",
 			__FUNCTION__, na, (long long)start_bit, (long long)count);
-		return -1;
+		return -EINVAL;
 	}
 
 	bit = start_bit & 7;
@@ -140,7 +140,7 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 
 	buf = ntfs_malloc(bufsize);
 	if (!buf)
-		return -1;
+		return -ENOMEM;
 	
 	/* Depending on @value, zero or set all bits in the allocated buffer. */
 	memset(buf, value ? 0xff : 0, bufsize);
@@ -150,8 +150,8 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 		/* read it in... */
 		br = ntfs_attr_pread(na, start_bit >> 3, 1, buf);
 		if (br != 1) {
-			if (br >= 0)
-				errno = EIO;
+//			if (br >= 0)
+				ret = -EIO;
 			goto free_err_out;
 		}
 		/* and set or clear the appropriate bits in it. */
@@ -177,7 +177,7 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 				// FIXME: Eeek! BUG!
 				ntfs_log_error("Lastbyte is zero. Leaving "
 						"inconsistent metadata.\n");
-				errno = EIO;
+				ret = -EIO;
 				goto free_err_out;
 			}
 			/* and it is in the currently loaded bitmap window... */
@@ -189,8 +189,8 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 						3, 1, lastbyte_buf);
 				if (br != 1) {
 					// FIXME: Eeek! We need rollback! (AIA)
-					if (br >= 0)
-						errno = EIO;
+//					if (br >= 0)
+						ret = -EIO;
 					ntfs_log_perror("Reading of last byte "
 						"failed (%lld). Leaving inconsistent "
 						"metadata", (long long)br);
@@ -215,8 +215,8 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 		br = ntfs_attr_pwrite(na, tmp, bufsize, buf);
 		if (br != bufsize) {
 			// FIXME: Eeek! We need rollback! (AIA)
-			if (br >= 0)
-				errno = EIO;
+//			if (br >= 0)
+				ret = -EIO;
 			ntfs_log_perror("Failed to write buffer to bitmap "
 				"(%lld != %lld). Leaving inconsistent metadata",
 				(long long)br, (long long)bufsize);
@@ -243,7 +243,7 @@ static int ntfs_bitmap_set_bits_in_run(ntfs_attr *na, s64 start_bit,
 			ntfs_log_error("Last buffer but count is not zero "
 				       "(%lld). Leaving inconsistent metadata.\n",
 				       (long long)count);
-			errno = EIO;
+			ret = -EIO;
 			goto free_err_out;
 		}
 	} while (count > 0);

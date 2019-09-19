@@ -230,7 +230,7 @@ static runlist_element *ntfs_rl_append(runlist_element *dst, int dsize,
 		ntfs_log_debug("Eeek. ntfs_rl_append() invoked with NULL "
 				"pointer!\n");
 		errno = EINVAL;
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	/* First, check if the right hand end needs merging. */
@@ -240,7 +240,7 @@ static runlist_element *ntfs_rl_append(runlist_element *dst, int dsize,
 	/* Space required: @dst size + @src size, less one if we merged. */
 	dst = ntfs_rl_realloc(dst, dsize, dsize + ssize - right);
 	if (!dst)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	/*
 	 * We are guaranteed to succeed from here so can start modifying the
 	 * original runlists.
@@ -298,7 +298,7 @@ static runlist_element *ntfs_rl_insert(runlist_element *dst, int dsize,
 		ntfs_log_debug("Eeek. ntfs_rl_insert() invoked with NULL "
 				"pointer!\n");
 		errno = EINVAL;
-		return NULL;
+		return ERR_PTR(-EINVAL);;
 	}
 
 	/* disc => Discontinuity between the end of @dst and the start of @src.
@@ -323,7 +323,7 @@ static runlist_element *ntfs_rl_insert(runlist_element *dst, int dsize,
 	 */
 	dst = ntfs_rl_realloc(dst, dsize, dsize + ssize - left + disc);
 	if (!dst)
-		return NULL;
+		return ERR_PTR(-ENOMEM);;
 	/*
 	 * We are guaranteed to succeed from here so can start modifying the
 	 * original runlist.
@@ -397,7 +397,7 @@ static runlist_element *ntfs_rl_replace(runlist_element *dst, int dsize,
 		ntfs_log_debug("Eeek. ntfs_rl_replace() invoked with NULL "
 				"pointer!\n");
 		errno = EINVAL;
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	/* First, see if the left and right ends need merging. */
@@ -413,7 +413,7 @@ static runlist_element *ntfs_rl_replace(runlist_element *dst, int dsize,
 	if (delta > 0) {
 		dst = ntfs_rl_realloc(dst, dsize, dsize + delta);
 		if (!dst)
-			return NULL;
+			return ERR_PTR(-ENOMEM);
 	}
 	/*
 	 * We are guaranteed to succeed from here so can start modifying the
@@ -477,13 +477,13 @@ static runlist_element *ntfs_rl_split(runlist_element *dst, int dsize,
 	if (!dst || !src) {
 		ntfs_log_debug("Eeek. ntfs_rl_split() invoked with NULL pointer!\n");
 		errno = EINVAL;
-		return NULL;
+		return ERR_PTR(-EINVAL);;
 	}
 
 	/* Space required: @dst size + @src size + one new hole. */
 	dst = ntfs_rl_realloc(dst, dsize, dsize + ssize + 1);
 	if (!dst)
-		return dst;
+		return ERR_PTR(-ENOMEM);;
 	/*
 	 * We are guaranteed to succeed from here so can start modifying the
 	 * original runlists.
@@ -557,7 +557,7 @@ static runlist_element *ntfs_runlists_merge_i(runlist_element *drl,
 	if (!srl[si].length) {
 		errno = EINVAL;
 		ntfs_log_perror("%s: unmapped source runlist", __FUNCTION__);
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	/* Record the starting points. */
@@ -579,7 +579,7 @@ static runlist_element *ntfs_runlists_merge_i(runlist_element *drl,
 			(srl[si].lcn >= 0)) {
 		errno = ERANGE;
 		ntfs_log_perror("Run lists overlap. Cannot merge");
-		return NULL;
+		return ERR_PTR(-ERANGE);
 	}
 
 	/* Scan to the end of both runlists in order to know their sizes. */
@@ -631,7 +631,7 @@ static runlist_element *ntfs_runlists_merge_i(runlist_element *drl,
 		else
 			drl = ntfs_rl_split(drl, ds, srl + sstart, ss, dins);
 	}
-	if (!drl) {
+	if (IS_ERR(drl)) {
 		ntfs_log_perror("Merge failed");
 		return drl;
 	}
@@ -709,7 +709,7 @@ critical_error:
 	ntfs_log_perror("libntfs: Critical error");
 	ntfs_log_debug("Forcing segmentation fault!\n");
 	marker_vcn = ((runlist*)NULL)->lcn;
-	return drl;
+	return drl ? : ERR_PTR(-ENOMEM);
 }
 
 /**
@@ -1104,14 +1104,14 @@ s64 ntfs_rl_pread(const ntfs_volume *vol, const runlist_element *rl,
 		const s64 pos, s64 count, void *b)
 {
 	s64 bytes_read, to_read, ofs, total;
-	int err = EIO;
+	int err = -EIO;
 
 	if (!vol || !rl || pos < 0 || count < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("Failed to read runlist [vol: %p rl: %p "
 				"pos: %lld count: %lld]", vol, rl,
 				(long long)pos, (long long)count);
-		return -1;
+		return -EINVAL;
 	}
 	if (!count)
 		return count;
@@ -1151,10 +1151,10 @@ retry:
 			continue;
 		}
 		/* If the syscall was interrupted, try again. */
-		if (bytes_read == (s64)-1 && errno == EINTR)
-			goto retry;
-		if (bytes_read == (s64)-1)
-			err = errno;
+//		if (bytes_read == (s64)-1 && errno == EINTR)
+//			goto retry;
+//		if (bytes_read == (s64)-1)
+//			err = errno;
 		goto rl_err_out;
 	}
 	/* Finally, return the number of bytes read. */
@@ -1162,8 +1162,8 @@ retry:
 rl_err_out:
 	if (total)
 		return total;
-	errno = err;
-	return -1;
+//	errno = err;
+	return err;
 }
 
 /**
@@ -1322,14 +1322,16 @@ int ntfs_get_size_for_mapping_pairs(const ntfs_volume *vol,
 	if (start_vcn < 0) {
 		ntfs_log_trace("start_vcn %lld (should be >= 0)\n",
 				(long long) start_vcn);
-		errno = EINVAL;
+//		errno = EINVAL;
+		rls = -EINVAL
 		goto errno_set;
 	}
 	if (!rl) {
 		if (start_vcn) {
 			ntfs_log_trace("rl NULL, start_vcn %lld (should be > 0)\n",
 					(long long) start_vcn);
-			errno = EINVAL;
+//			errno = EINVAL;
+			rls = -EINVAL
 			goto errno_set;
 		}
 		rls = 1;
@@ -1339,7 +1341,8 @@ int ntfs_get_size_for_mapping_pairs(const ntfs_volume *vol,
 	while (rl->length && start_vcn >= rl[1].vcn)
 		rl++;
 	if ((!rl->length && start_vcn > rl->vcn) || start_vcn < rl->vcn) {
-		errno = EINVAL;
+//		errno = EINVAL;
+		rls = -EINVAL
 		goto errno_set;
 	}
 	prev_lcn = 0;
@@ -1396,11 +1399,11 @@ out:
 	return rls;
 err_out:
 	if (rl->lcn == LCN_RL_NOT_MAPPED)
-		errno = EINVAL;
+		rls = -EINVAL;
 	else
-		errno = EIO;
+		rls = -EIO;
 errno_set:	
-	rls = -1;
+//	rls = -1;
 	goto out;
 }
 
@@ -1483,6 +1486,7 @@ int ntfs_mapping_pairs_build(const ntfs_volume *vol, u8 *dst,
 	LCN prev_lcn;
 	u8 *dst_max, *dst_next;
 	s8 len_len, lcn_len;
+	int err;
 	int ret = 0;
 
 	if (start_vcn < 0)
@@ -1600,18 +1604,19 @@ size_err:
 	/* Add terminator byte. */
 	*dst = 0;
 nospc_err:
-	errno = ENOSPC;
+	err = -ENOSPC;
 	goto errno_set;
 val_err:
-	errno = EINVAL;
+	err = -EINVAL;
 	goto errno_set;
 err_out:
 	if (rl->lcn == LCN_RL_NOT_MAPPED)
-		errno = EINVAL;
+		err = -EINVAL;
 	else
-		errno = EIO;
+		err = -EIO;
 errno_set:
-	ret = -1;
+//	ret = -1;
+	ret = err;
 	goto out;
 }
 
@@ -1634,21 +1639,21 @@ int ntfs_rl_truncate(runlist **arl, const VCN start_vcn)
 	/* BOOL is_end = FALSE; */
 
 	if (!arl || !*arl) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		if (!arl)
 			ntfs_log_perror("rl_truncate error: arl: %p", arl);
 		else
 			ntfs_log_perror("rl_truncate error:"
 				" arl: %p *arl: %p", arl, *arl);
-		return -1;
+		return -EINVAL;
 	}
 	
 	rl = *arl;
 	
 	if (start_vcn < rl->vcn) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("Start_vcn lies outside front of runlist");
-		return -1;
+		return -EINVAL;
 	}
 	
 	/* Find the starting vcn in the run list. */
@@ -1659,9 +1664,9 @@ int ntfs_rl_truncate(runlist **arl, const VCN start_vcn)
 	}
 	
 	if (!rl->length) {
-		errno = EIO;
+//		errno = EIO;
 		ntfs_log_trace("Truncating already truncated runlist?\n");
-		return -1;
+		return -EIO;
 	}
 	
 	/* Truncate the run. */

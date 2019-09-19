@@ -252,7 +252,7 @@ s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
 	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
 
 	if (!b || count < 0 || pos < 0)
-		return -1;
+		return -EINVAL;
 	if (!count)
 		return 0;
 	sector = pos / NTFS_BLOCK_SIZE;

@@ -703,7 +703,7 @@ int ntfs_inode_attach_all_extents(ntfs_inode *ni)
 	}
 
 	/* Walk through attribute list and attach all extents. */
-	errno = 0;
+//	errno = 0;
 	ale = (ATTR_LIST_ENTRY *)ni->attr_list;
 	while ((u8*)ale < ni->attr_list + ni->attr_list_size) {
 		if (ni->mft_no != MREF_LE(ale->mft_reference) &&
@@ -1286,11 +1286,12 @@ int ntfs_inode_free_space(ntfs_inode *ni, int size)
 {
 	ntfs_attr_search_ctx *ctx;
 	int freed;
+	int err;
 
 	if (!ni || size < 0) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: ni=%p size=%d", __FUNCTION__, ni, size);
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for inode %lld, size %d\n",
@@ -1304,12 +1305,12 @@ int ntfs_inode_free_space(ntfs_inode *ni, int size)
 
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx)
-		return -1;
+		return -ENOMEM;
 	/*
 	 * $STANDARD_INFORMATION and $ATTRIBUTE_LIST must stay in the base MFT
 	 * record, so position search context on the first attribute after them.
 	 */
-	if (ntfs_attr_position(AT_FILE_NAME, ctx))
+	if ((err = ntfs_attr_position(AT_FILE_NAME, ctx)))
 		goto put_err_out;
 
 	while (1) {
@@ -1320,7 +1321,7 @@ int ntfs_inode_free_space(ntfs_inode *ni, int size)
 		 */
 		while (ctx->ntfs_ino->mft_no != ni->mft_no) {
 retry:			
-			if (ntfs_attr_position(AT_UNUSED, ctx))
+			if ((err = ntfs_attr_position(AT_UNUSED, ctx)))
 				goto put_err_out;
 		}
 
@@ -1352,12 +1353,12 @@ retry:
 		 * $ATTRIBUTE_LIST.
 		 */
 		ntfs_attr_reinit_search_ctx(ctx);
-		if (ntfs_attr_position(AT_FILE_NAME, ctx))
+		if ((err = ntfs_attr_position(AT_FILE_NAME, ctx)))
 			break;
 	}
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
-	if (errno == ENOSPC)
+	if (err == -ENOSPC)
 		ntfs_log_trace("No attributes left that could be moved out.\n");
 	return -1;
 }

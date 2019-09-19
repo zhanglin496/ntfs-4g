@@ -672,8 +672,8 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 	if (!vol || !vol->lcnbmp_na || !na || start_vcn < 0 ||
 			(count < 0 && count != -1)) {
 		ntfs_log_trace("Invalid arguments!\n");
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	
 	ntfs_log_enter("Entering for inode 0x%llx, attr 0x%x, count 0x%llx, "
@@ -681,14 +681,15 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 		       le32_to_cpu(na->type), (long long)count, (long long)start_vcn);
 
 	rl = ntfs_attr_find_vcn(na, start_vcn);
-	if (!rl) {
-		if (errno == ENOENT)
+	if (IS_ERR(rl)) {
+		ret = PTR_ERR(rl);
+		if (ret == -ENOENT)
 			ret = 0;
 		goto leave;
 	}
 
 	if (rl->lcn < 0 && rl->lcn != LCN_HOLE) {
-		errno = EIO;
+		ret = -EIO;
 		ntfs_log_perror("%s: Unexpected lcn (%lld)", __FUNCTION__, 
 				(long long)rl->lcn);
 		goto leave;
@@ -705,8 +706,8 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 	if (rl->lcn != LCN_HOLE) {
 		/* Do the actual freeing of the clusters in this run. */
 		update_full_status(vol,rl->lcn + delta);
-		if (ntfs_bitmap_clear_run(vol->lcnbmp_na, rl->lcn + delta,
-					  to_free))
+		if ((ret = ntfs_bitmap_clear_run(vol->lcnbmp_na, rl->lcn + delta,
+					  to_free)))
 			goto leave;
 		nr_freed = to_free;
 	} 
@@ -725,7 +726,7 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 		//	  list support! (AIA)
 		if (rl->lcn < 0 && rl->lcn != LCN_HOLE) {
 			// FIXME: Eeek! We need rollback! (AIA)
-			errno = EIO;
+			ret = -EIO;
 			ntfs_log_perror("%s: Invalid lcn (%lli)", 
 					__FUNCTION__, (long long)rl->lcn);
 			goto out;
@@ -738,8 +739,8 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 
 		if (rl->lcn != LCN_HOLE) {
 			update_full_status(vol,rl->lcn);
-			if (ntfs_bitmap_clear_run(vol->lcnbmp_na, rl->lcn,
-					to_free)) {
+			if ((ret = ntfs_bitmap_clear_run(vol->lcnbmp_na, rl->lcn,
+					to_free))) {
 				// FIXME: Eeek! We need rollback! (AIA)
 				ntfs_log_perror("%s: Clearing bitmap run failed",
 						__FUNCTION__);
@@ -754,7 +755,7 @@ int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 
 	if (count != -1 && count != 0) {
 		// FIXME: Eeek! BUG()
-		errno = EIO;
+		ret = -EIO;
 		ntfs_log_perror("%s: count still not zero (%lld)", __FUNCTION__,
 			       (long long)count);
 		goto out;

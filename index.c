@@ -1126,6 +1126,7 @@ static int ntfs_ir_reparent(ntfs_index_context *icx)
 	INDEX_BLOCK *ib = NULL;
 	VCN new_ib_vcn;
 	int ix_root_size;
+	int err;
 	int ret = STATUS_ERROR;
 
 	ntfs_log_trace("Entering\n");
@@ -1172,13 +1173,13 @@ retry :
 	ir->index.allocated_size = ir->index.index_length;
 	ix_root_size = sizeof(INDEX_ROOT) - sizeof(INDEX_HEADER)
 			+ le32_to_cpu(ir->index.allocated_size);
-	if (ntfs_resident_attr_value_resize(ctx->mrec, ctx->attr,
-					ix_root_size)) {
+	if ((err = ntfs_resident_attr_value_resize(ctx->mrec, ctx->attr,
+					ix_root_size))) {
 			/*
 			 * When there is no space to build a non-resident
 			 * index, we may have to move the root to an extent
 			 */
-		if ((errno == ENOSPC)
+		if ((err == -ENOSPC)
 		    && (ctx->al_entry || !ntfs_inode_add_attrlist(icx->ni))) {
 			ntfs_attr_put_search_ctx(ctx);
 			ctx = (ntfs_attr_search_ctx*)NULL;
@@ -1225,7 +1226,7 @@ static int ntfs_ir_truncate(ntfs_index_context *icx, int data_size)
 	ntfs_log_trace("Entering\n");
 	
 	na = ntfs_attr_open(icx->ni, AT_INDEX_ROOT, icx->name, icx->name_len);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open INDEX_ROOT");
 		return STATUS_ERROR;
 	}
