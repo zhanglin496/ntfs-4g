@@ -45,7 +45,7 @@
 #include "logging.h"
 #include "misc.h"
 
-static int errno;
+//static int errno;
 
 
 /**
@@ -67,25 +67,25 @@ int ntfs_attrlist_need(ntfs_inode *ni)
 
 	if (!ni) {
 		ntfs_log_trace("Invalid arguments.\n");
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("Entering for inode 0x%llx.\n", (long long) ni->mft_no);
 
 	if (!NInoAttrList(ni)) {
 		ntfs_log_trace("Inode haven't got attribute list.\n");
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	if (!ni->attr_list) {
 		ntfs_log_trace("Corrupt in-memory struct.\n");
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
-	errno = 0;
+//	errno = 0;
 	ale = (ATTR_LIST_ENTRY *)ni->attr_list;
 	while ((u8*)ale < ni->attr_list + ni->attr_list_size) {
 		if (MREF_LE(ale->mft_reference) != ni->mft_no)
@@ -209,8 +209,8 @@ int ntfs_attrlist_entry_add(ntfs_inode *ni, ATTR_RECORD *attr)
 		ntfs_log_trace("Failed to open $ATTRIBUTE_LIST attribute.\n");
 		goto err_out;
 	}
-	if (ntfs_attr_truncate(na, ni->attr_list_size + entry_len)) {
-		err = errno;
+	if ((err = ntfs_attr_truncate(na, ni->attr_list_size + entry_len))) {
+//		err = errno;
 		ntfs_log_trace("$ATTRIBUTE_LIST resize failed.\n");
 		goto err_out;
 	}
@@ -232,7 +232,7 @@ err_out:
 	if (na)
 		ntfs_attr_close(na);
 	free(new_al);
-	errno = err;
+//	errno = err;
 	return err;
 }
 
@@ -255,7 +255,7 @@ int ntfs_attrlist_entry_rm(ntfs_attr_search_ctx *ctx)
 
 	if (!ctx || !ctx->ntfs_ino || !ctx->al_entry) {
 		ntfs_log_trace("Invalid arguments.\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return -EINVAL;
 	}
 
@@ -272,7 +272,7 @@ int ntfs_attrlist_entry_rm(ntfs_attr_search_ctx *ctx)
 
 	if (!NInoAttrList(base_ni)) {
 		ntfs_log_trace("Attribute list isn't present.\n");
-		errno = ENOENT;
+//		errno = ENOENT;
 		return -ENOENT;
 	}
 

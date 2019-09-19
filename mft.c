@@ -151,44 +151,44 @@ int ntfs_mft_records_write(const ntfs_volume *vol, const MFT_REF mref,
 	int cnt = 0, res = 0;
 
 	if (!vol || !vol->mft_na || vol->mftmirr_size <= 0 || !b || count < 0) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	m = MREF(mref);
 	/* Refuse to write non-allocated mft records. */
 	if (m + count > vol->mft_na->initialized_size >>
 			vol->mft_record_size_bits) {
-		errno = ESPIPE;
+//		errno = ESPIPE;
 		ntfs_log_perror("Trying to write non-allocated mft records "
 				"(%lld > %lld)", (long long)m + count,
 				(long long)vol->mft_na->initialized_size >>
 				vol->mft_record_size_bits);
-		return -1;
+		return -ESPIPE;
 	}
 	if (m < vol->mftmirr_size) {
 		if (!vol->mftmirr_na) {
-			errno = EINVAL;
-			return -1;
+//			errno = EINVAL;
+			return -EINVAL;
 		}
 		cnt = vol->mftmirr_size - m;
 		if (cnt > count)
 			cnt = count;
 		bmirr = ntfs_malloc(cnt * vol->mft_record_size);
 		if (!bmirr)
-			return -1;
+			return -ENOMEM;
 		memcpy(bmirr, b, cnt * vol->mft_record_size);
 	}
 	bw = ntfs_attr_mst_pwrite(vol->mft_na, m << vol->mft_record_size_bits,
 			count, vol->mft_record_size, b);
 	if (bw != count) {
-		if (bw != -1)
-			errno = EIO;
+//		if (bw != -1)
+//			errno = EIO;
 		if (bw >= 0)
 			ntfs_log_debug("Error: partial write while writing $Mft "
 					"record(s)!\n");
 		else
 			ntfs_log_perror("Error writing $Mft record(s)");
-		res = errno;
+		res = -EIO;
 	}
 	if (bmirr && bw > 0) {
 		if (bw < cnt)
@@ -197,18 +197,18 @@ int ntfs_mft_records_write(const ntfs_volume *vol, const MFT_REF mref,
 				m << vol->mft_record_size_bits, cnt,
 				vol->mft_record_size, bmirr);
 		if (bw != cnt) {
-			if (bw != -1)
-				errno = EIO;
+//			if (bw != -1)
+//				errno = EIO;
 			ntfs_log_debug("Error: failed to sync $MFTMirr! Run "
 					"chkdsk.\n");
-			res = errno;
+			res = -EIO;
 		}
 	}
 	free(bmirr);
-	if (!res)
-		return res;
-	errno = res;
-	return -1;
+//	if (!res)
+//		return res;
+//	errno = res;
+	return res;
 }
 
 int ntfs_mft_record_check(const ntfs_volume *vol, const MFT_REF mref, 
@@ -1885,8 +1885,8 @@ int ntfs_mft_record_free(ntfs_volume *vol, ntfs_inode *ni)
 	ntfs_log_trace("Entering for inode 0x%llx.\n", (long long) ni->mft_no);
 
 	if (!vol || !vol->mftbmp_na || !ni) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	/* Cache the mft reference for later. */
@@ -1907,13 +1907,13 @@ int ntfs_mft_record_free(ntfs_volume *vol, ntfs_inode *ni)
 	/* Set the inode dirty and write it out. */
 	ntfs_inode_mark_dirty(ni);
 	if (ntfs_inode_sync(ni)) {
-		err = errno;
+//		err = errno;
 		goto sync_rollback;
 	}
 
 	/* Clear the bit in the $MFT/$BITMAP corresponding to this record. */
 	if (ntfs_bitmap_clear_bit(vol->mftbmp_na, mft_no)) {
-		err = errno;
+//		err = errno;
 		// FIXME: If ntfs_bitmap_clear_run() guarantees rollback on
 		//	  error, this could be changed to goto sync_rollback;
 		goto bitmap_rollback;
@@ -1928,7 +1928,7 @@ int ntfs_mft_record_free(ntfs_volume *vol, ntfs_inode *ni)
 		vol->free_mft_records++; 
 		return 0;
 	}
-	err = errno;
+//	err = errno;
 
 	/* Rollback what we did... */
 bitmap_rollback:
@@ -1939,7 +1939,7 @@ sync_rollback:
 	ni->mrec->flags |= MFT_RECORD_IN_USE;
 	ni->mrec->sequence_number = old_seq_no;
 	ntfs_inode_mark_dirty(ni);
-	errno = err;
+//	errno = err;
 	return -1;
 }
 
@@ -1955,8 +1955,8 @@ int ntfs_mft_usn_dec(MFT_RECORD *mrec)
 	le16 *usnp;
 
 	if (!mrec) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	usnp = (le16*)((char*)mrec + le16_to_cpu(mrec->usa_ofs));
 	usn = le16_to_cpup(usnp);
@@ -1966,4 +1966,3 @@ int ntfs_mft_usn_dec(MFT_RECORD *mrec)
 
 	return 0;
 }
-
