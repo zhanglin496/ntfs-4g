@@ -1385,13 +1385,15 @@ static int ntfs_attr_fill_hole(ntfs_attr *na, s64 count, s64 *ofs,
 		 * For a compressed attribute, we must be sure there are two
 		 * available entries, so reserve them before it gets too late.
 		 */
-	if (*rl && (na->data_flags & ATTR_COMPRESSION_MASK)) {
+	if (!IS_ERR(*rl) && (na->data_flags & ATTR_COMPRESSION_MASK)) {
 		runlist_element *oldrl = na->rl;
 		na->rl = *rl;
 		*rl = ntfs_rl_extend(na,*rl,2);
-		if (!*rl) na->rl = oldrl; /* restore to original if failed */
+		if (!*rl)
+			na->rl = oldrl; /* restore to original if failed */
 	}
-	if (!*rl) {
+	if (IS_ERR_OR_NULL(*rl)) {
+		*rl = NULL;
 //		eo = errno;
 		ntfs_log_perror("Failed to merge runlists");
 		if (ntfs_cluster_free_from_rl(vol, rlc)) {
@@ -1406,7 +1408,7 @@ static int ntfs_attr_fill_hole(ntfs_attr *na, s64 count, s64 *ofs,
 	if ((*update_from == -1) || (from_vcn < *update_from))
 		*update_from = from_vcn;
 	*rl = ntfs_attr_find_vcn(na, cur_vcn);
-	if (!*rl) {
+	if (IS_ERR(*rl)) {
 		/*
 		 * It's definitely a BUG, if we failed to find @cur_vcn, because
 		 * we missed it during instantiating of the hole.
@@ -1809,8 +1811,8 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 	ntfs_attr_search_ctx *ctx = NULL;
 	runlist_element *rl;
 	s64 hole_end;
-	int eo;
-	int compressed_part;
+	int compressed_part;	
+	int eo = -EIO;
 	struct {
 		unsigned int undo_initialized_size	: 1;
 		unsigned int undo_data_size		: 1;
@@ -1875,9 +1877,9 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		 * full runlist. To avoid unnecessary reorganization,
 		 * we avoid sparse testing until the data is filled in.
 		 */
-		if (ntfs_attr_truncate_i(na, pos + count,
+		if ((eo = ntfs_attr_truncate_i(na, pos + count,
 					(NAttrDataAppending(na) ?
-						HOLES_DELAY : HOLES_OK))) {
+						HOLES_DELAY : HOLES_OK)))) {
 			ntfs_log_perror("Failed to enlarge attribute");
 			goto errno_set;
 		}
@@ -1889,7 +1891,7 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		if (NAttrDataAppending(na))
 			need_to.undo_data_size = 1;
 #else
-		if (ntfs_attr_truncate_i(na, pos + count, HOLES_OK)) {
+		if ((eo = ntfs_attr_truncate_i(na, pos + count, HOLES_OK))) {
 			ntfs_log_perror("Failed to enlarge attribute");
 			goto errno_set;
 		}
@@ -1918,10 +1920,12 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		char *val;
 
 		ctx = ntfs_attr_get_search_ctx(na->ni, NULL);
-		if (!ctx)
+		if (!ctx) {
+			eo = -ENOMEM;
 			goto err_out;
-		if (ntfs_attr_lookup(na->type, na->name, na->name_len, 0,
-				0, NULL, 0, ctx)) {
+		}
+		if ((eo = ntfs_attr_lookup(na->type, na->name, na->name_len, 0,
+				0, NULL, 0, ctx))) {
 			ntfs_log_perror("%s: lookup failed", __FUNCTION__);
 			goto err_out;
 		}
@@ -1929,13 +1933,14 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		if (val < (char*)ctx->attr || val +
 				le32_to_cpu(ctx->attr->value_length) >
 				(char*)ctx->mrec + vol->mft_record_size) {
-			errno = EIO;
+//			errno = EIO;
+			eo = -EIO;
 			ntfs_log_perror("%s: Sanity check failed", __FUNCTION__);
 			goto err_out;
 		}
 		memcpy(val + pos, b, count);
-		if (ntfs_mft_record_write(vol, ctx->ntfs_ino->mft_no,
-				ctx->mrec)) {
+		if ((eo = ntfs_mft_record_write(vol, ctx->ntfs_ino->mft_no,
+				ctx->mrec))) {
 			/*
 			 * NOTE: We are in a bad state at this moment. We have
 			 * dirtied the mft record but we failed to commit it to
@@ -1963,7 +1968,7 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		 * block, which may be split in several extents.
 		 */
 		if (compressed && !NAttrDataAppending(na)) {
-			if (ntfs_attr_map_whole_runlist(na))
+			if ((eo = ntfs_attr_map_whole_runlist(na)))
 				goto err_out;
 		} else {
 			VCN block_begin;
@@ -1978,13 +1983,13 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 				block_begin &= -na->compression_block_clusters;
 			if (block_begin)
 				block_begin--;
-			if (ntfs_attr_map_partial_runlist(na, block_begin))
+			if ((eo = ntfs_attr_map_partial_runlist(na, block_begin)))
 				goto err_out;
 			if ((update_from == -1) || (block_begin < update_from))
 				update_from = block_begin;
 		}
 #else
-			if (ntfs_attr_map_whole_runlist(na))
+			if ((eo = ntfs_attr_map_whole_runlist(na)))
 				goto err_out;
 #endif
 		/*
@@ -1992,7 +1997,8 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		 * available entry, and, when reopening a compressed file,
 		 * we may need to split a hole. So reserve the entries
 		 * before it gets too late.
-		 */
+		 */ 
+		eo = -ENOMEM
 		if (compressed) {
 			na->rl = ntfs_rl_extend(na,na->rl,2);
 			if (!na->rl)
@@ -2003,14 +2009,14 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 		ctx = ntfs_attr_get_search_ctx(na->ni, NULL);
 		if (!ctx)
 			goto err_out;
-		if (ntfs_attr_lookup(na->type, na->name, na->name_len, 0,
-				0, NULL, 0, ctx))
+		if ((eo = ntfs_attr_lookup(na->type, na->name, na->name_len, 0,
+				0, NULL, 0, ctx)))
 			goto err_out;
 		
 		/* If write starts beyond initialized_size, zero the gap. */
 		if (pos > na->initialized_size)
-			if (ntfs_attr_fill_zero(na, na->initialized_size, 
-						pos - na->initialized_size))
+			if ((eo = ntfs_attr_fill_zero(na, na->initialized_size, 
+						pos - na->initialized_size)))
 				goto err_out;
 			
 		ctx->attr->initialized_size = cpu_to_sle64(pos + count);
@@ -2019,8 +2025,8 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 			na->data_size = pos + count;
 			ctx->attr->data_size = ctx->attr->initialized_size;
 		}
-		if (ntfs_mft_record_write(vol, ctx->ntfs_ino->mft_no,
-				ctx->mrec)) {
+		if ((eo = ntfs_mft_record_write(vol, ctx->ntfs_ino->mft_no,
+				ctx->mrec))) {
 			/*
 			 * Undo the change in the in-memory copy and send it
 			 * back for writing.
@@ -2057,14 +2063,15 @@ static s64 ntfs_attr_pwrite_i(ntfs_attr *na, const s64 pos, s64 count,
 	}
 	/* Find the runlist element containing the vcn. */
 	rl = ntfs_attr_find_vcn(na, pos >> vol->cluster_size_bits);
-	if (!rl) {
+	if (IS_ERR(rl)) {
 		/*
 		 * If the vcn is not present it is an out of bounds write.
 		 * However, we already extended the size of the attribute,
 		 * so getting this here must be an error of some kind.
 		 */
-		if (errno == ENOENT) {
-			errno = EIO;
+		eo = PTR_ERR(rl);
+		if (eo == -ENOENT) {
+			eo = -EIO;
 			ntfs_log_perror("%s: Failed to find VCN #3", __FUNCTION__);
 		}
 		goto err_out;
@@ -2247,9 +2254,9 @@ retry:
 		if (written != to_write) {
 			/* Partial write cannot be dealt with, stop there */
 			/* If the syscall was interrupted, try again. */
-			if (written == (s64)-1 && errno == EINTR)
-				goto retry;
-			if (!written)
+//			if (written == (s64)-1 && errno == EINTR)
+//				goto retry;
+//			if (!written)
 				eo = -EIO;
 			goto rl_err_out;
 		}
@@ -2265,8 +2272,8 @@ done:
 		 * inode extents were needed.
 		 */
 	if (NAttrRunlistDirty(na)) {
-		if (ntfs_attr_update_mapping_pairs(na,
-				(update_from < 0 ? 0 : update_from))) {
+		if ((eo = ntfs_attr_update_mapping_pairs(na,
+				(update_from < 0 ? 0 : update_from)))) {
 			/*
 			 * FIXME: trying to recover by goto rl_err_out; 
 			 * could cause driver hang by infinite looping.
@@ -2296,6 +2303,8 @@ rl_err_out:
 	}
 //	errno = eo;
 err_out:
+	if (!eo)
+		eo = -EIO;
 //	eo = errno;
 	if (need_to.undo_initialized_size) {
 		int err;
@@ -2356,8 +2365,8 @@ s64 ntfs_attr_pwrite(ntfs_attr *na, const s64 pos, s64 count, const void *b)
 	
 	total = 0;
 	if (!na || !na->ni || !na->ni->vol || !b || pos < 0 || count < 0) {
-		errno = EINVAL;
-		written = -1;
+//		errno = EINVAL;
+		written = -EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
 		goto out;
 	}
@@ -2396,7 +2405,8 @@ int ntfs_attr_pclose(ntfs_attr *na)
 			le32_to_cpu(na->type));
 	
 	if (!na || !na->ni || !na->ni->vol) {
-		errno = EINVAL;
+//		errno = EINVAL;
+		eo = -EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
 		goto errno_set;
 	}
@@ -2409,7 +2419,8 @@ int ntfs_attr_pclose(ntfs_attr *na)
 	 * access denied, which is what Windows NT4 does, too.
 	 */
 	if (NAttrEncrypted(na) && NAttrNonResident(na)) {
-		errno = EACCES;
+//		errno = EACCES;
+		eo = -EACCES;
 		goto errno_set;
 	}
 	/* If this is not a compressed attribute get out */
@@ -2419,7 +2430,8 @@ int ntfs_attr_pclose(ntfs_attr *na)
 
 		/* safety check : no recursion on close */
 	if (NAttrComprClosing(na)) {
-		errno = EIO;
+//		errno = EIO;
+		eo = -EIO;
 		ntfs_log_error("Bad ntfs_attr_pclose"
 				" recursion on inode %lld\n",
 				(long long)na->ni->mft_no);
@@ -2430,22 +2442,25 @@ int ntfs_attr_pclose(ntfs_attr *na)
 		 * For a compressed attribute, we must be sure there are two
 		 * available entries, so reserve them before it gets too late.
 		 */
-	if (ntfs_attr_map_whole_runlist(na))
+	if ((eo = ntfs_attr_map_whole_runlist(na)))
 		goto err_out;
 	na->rl = ntfs_rl_extend(na,na->rl,2);
-	if (!na->rl)
+	if (!na->rl) {
+		eo = -ENOMEM;
 		goto err_out;
+	}
 	na->unused_runs = 2;
 	/* Find the runlist element containing the terminal vcn. */
 	rl = ntfs_attr_find_vcn(na, (na->initialized_size - 1) >> vol->cluster_size_bits);
-	if (!rl) {
+	if (IS_ERR(rl)) {
 		/*
 		 * If the vcn is not present it is an out of bounds write.
 		 * However, we have already written the last byte uncompressed,
 		 * so getting this here must be an error of some kind.
 		 */
-		if (errno == ENOENT) {
-			errno = EIO;
+		eo = PTR_ERR(eo);
+		if (eo == -ENOENT) {
+			eo = -EIO;
 			ntfs_log_perror("%s: Failed to find VCN #5", __FUNCTION__);
 		}
 		goto err_out;
@@ -2483,9 +2498,10 @@ int ntfs_attr_pclose(ntfs_attr *na)
 
 	if (rl->lcn == LCN_RL_NOT_MAPPED) {
 		rl = ntfs_attr_find_vcn(na, rl->vcn);
-		if (!rl) {
-			if (errno == ENOENT) {
-				errno = EIO;
+		if (IS_ERR(rl)) {
+			eo = PTR_ERR(eo);
+			if (eo == -ENOENT) {
+				eo = -EIO;
 				ntfs_log_perror("%s: Failed to find VCN"
 						" #6", __FUNCTION__);
 			}
@@ -2495,20 +2511,20 @@ int ntfs_attr_pclose(ntfs_attr *na)
 		ofs = na->initialized_size - (rl->vcn << vol->cluster_size_bits);
 	}
 	if (!rl->length) {
-		errno = EIO;
+		eo = -EIO;
 		ntfs_log_perror("%s: Zero run length", __FUNCTION__);
 		goto rl_err_out;
 	}
 	if (rl->lcn < (LCN)0) {
 		if (rl->lcn != (LCN)LCN_HOLE) {
-			errno = EIO;
+			eo = -EIO;
 			ntfs_log_perror("%s: Unexpected LCN (%lld)", 
 					__FUNCTION__,
 					(long long)rl->lcn);
 			goto rl_err_out;
 		}
 			
-		if (ntfs_attr_fill_hole(na, (s64)0, &ofs, &rl, &update_from))
+		if ((eo = ntfs_attr_fill_hole(na, (s64)0, &ofs, &rl, &update_from)))
 			goto err_out;
 	}
 	while (rl->length
@@ -2534,16 +2550,16 @@ retry:
 	}
 	if (failed) {
 		/* If the syscall was interrupted, try again. */
-		if (errno == EINTR)
-			goto retry;
-		else
+//		if (errno == EINTR)
+//			goto retry;
+//		else
 			goto rl_err_out;
 	}
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	/* Update mapping pairs if needed. */
 	if (NAttrFullyMapped(na))
-		if (ntfs_attr_update_mapping_pairs(na, update_from)) {
+		if ((eo = ntfs_attr_update_mapping_pairs(na, update_from))) {
 			/*
 			 * FIXME: trying to recover by goto rl_err_out; 
 			 * could cause driver hang by infinite looping.
@@ -2554,7 +2570,8 @@ retry:
 out:	
 	NAttrClearComprClosing(na);
 	ntfs_log_leave("\n");
-	return (!ok);
+//	return (!ok);
+	return eo;
 rl_err_out:
 		/*
 		 * need not restore old sizes, only compressed_size
@@ -2563,13 +2580,13 @@ rl_err_out:
 		 * and must be kept consistent with the runlists.
 		 */
 err_out:
-	eo = errno;
+//	eo = errno;
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	/* Update mapping pairs if needed. */
 	if (NAttrFullyMapped(na))
 		ntfs_attr_update_mapping_pairs(na, 0);
-	errno = eo;
+//	errno = eo;
 errno_set:
 	ok = FALSE;
 	goto out;
@@ -2670,8 +2687,8 @@ s64 ntfs_attr_mst_pwrite(ntfs_attr *na, const s64 pos, s64 bk_cnt,
 			(unsigned long long)na->ni->mft_no, le32_to_cpu(na->type),
 			(long long)pos);
 	if (bk_cnt < 0 || bk_size % NTFS_BLOCK_SIZE) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	if (!bk_cnt)
 		return 0;
@@ -3880,8 +3897,8 @@ int ntfs_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	else
 		base_ni = ni;
 	if (type != AT_ATTRIBUTE_LIST && NInoAttrList(base_ni)) {
-		if (ntfs_attrlist_entry_add(ni, a)) {
-			err = errno;
+		if ((err = ntfs_attrlist_entry_add(ni, a))) {
+//			err = errno;
 			ntfs_attr_record_resize(m, a, 0);
 			ntfs_log_trace("Failed add attribute entry to "
 					"ATTRIBUTE_LIST.\n");
@@ -4017,8 +4034,8 @@ int ntfs_non_resident_attr_record_add(ntfs_inode *ni, ATTR_TYPES type,
 	else
 		base_ni = ni;
 	if (type != AT_ATTRIBUTE_LIST && NInoAttrList(base_ni)) {
-		if (ntfs_attrlist_entry_add(ni, a)) {
-			err = errno;
+		if ((err = ntfs_attrlist_entry_add(ni, a))) {
+//			err = errno;
 			ntfs_log_perror("Failed add attr entry to attrlist");
 			ntfs_attr_record_resize(m, a, 0);
 			goto put_err_out;
@@ -6619,7 +6636,7 @@ static int stuff_hole(ntfs_attr *na, const s64 pos)
 		ntfs_log_error("Failed to stuff a compressed file"
 			"target %lld reached %lld\n",
 			(long long)pos, (long long)na->initialized_size);
-		errno = EIO;
+//		errno = EIO;
 		ret = -1;
 	}
 	return (ret);

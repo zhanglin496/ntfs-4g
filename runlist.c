@@ -49,7 +49,7 @@
 #include "logging.h"
 #include "misc.h"
 
-static int errno;
+//static int errno;
 
 /**
  * ntfs_rl_mm - runlist memmove
@@ -136,7 +136,7 @@ runlist_element *ntfs_rl_extend(ntfs_attr *na, runlist_element *rl,
 			last++;
 		newrl = ntfs_rl_realloc(na->rl,last+1,last+more_entries+1);
 		if (!newrl) {
-			errno = ENOMEM;
+//			errno = ENOMEM;
 			rl = (runlist_element*)NULL;
 		} else {
 			na->rl = newrl;
@@ -144,7 +144,7 @@ runlist_element *ntfs_rl_extend(ntfs_attr *na, runlist_element *rl,
 		}
 	} else {
 		ntfs_log_error("Cannot extend unmapped runlist");
-		errno = EIO;
+//		errno = EIO;
 		rl = (runlist_element*)NULL;
 	}
 	return (rl);
@@ -229,7 +229,7 @@ static runlist_element *ntfs_rl_append(runlist_element *dst, int dsize,
 	if (!dst || !src) {
 		ntfs_log_debug("Eeek. ntfs_rl_append() invoked with NULL "
 				"pointer!\n");
-		errno = EINVAL;
+//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);
 	}
 
