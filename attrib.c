@@ -4097,7 +4097,7 @@ int ntfs_attr_record_rm(ntfs_attr_search_ctx *ctx)
 	 * delete $ATTRIBUTE_LIST itself.
 	 */
 	if (NInoAttrList(base_ni) && type != AT_ATTRIBUTE_LIST) {
-		if ((ret = ntfs_attrlist_entry_rm(ctx)) {
+		if ((ret = ntfs_attrlist_entry_rm(ctx))) {
 			ntfs_log_trace("Couldn't delete record from "
 					"$ATTRIBUTE_LIST.\n");
 			return ret;
@@ -6337,7 +6337,7 @@ static int ntfs_non_resident_attr_expand_i(ntfs_attr *na, const s64 newsize,
 	}
 
 	if ((err = ntfs_attr_lookup(na->type, na->name, na->name_len, CASE_SENSITIVE,
-			0, NULL, 0, ctx))_) {
+			0, NULL, 0, ctx))) {
 //		err = errno;
 		ntfs_log_perror("Lookup of first attribute extent failed");
 		if (err == -ENOENT)

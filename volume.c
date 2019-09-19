@@ -437,7 +437,7 @@ static int ntfs_mftmirr_load(ntfs_volume *vol)
 	vol->mftmirr_na = ntfs_attr_open(vol->mftmirr_ni, AT_DATA, AT_UNNAMED, 0);
 	if (IS_ERR(vol->mftmirr_na)) {
 		ntfs_log_perror("Failed to open $MFTMirr/$DATA");
-		err = PTR_ERR(ol->mftmirr_na);
+		err = PTR_ERR(vol->mftmirr_na);
 		goto error_exit;
 	}
 	

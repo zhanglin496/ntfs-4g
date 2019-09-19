@@ -1323,7 +1323,7 @@ int ntfs_get_size_for_mapping_pairs(const ntfs_volume *vol,
 		ntfs_log_trace("start_vcn %lld (should be >= 0)\n",
 				(long long) start_vcn);
 //		errno = EINVAL;
-		rls = -EINVAL
+		rls = -EINVAL;
 		goto errno_set;
 	}
 	if (!rl) {
@@ -1331,7 +1331,7 @@ int ntfs_get_size_for_mapping_pairs(const ntfs_volume *vol,
 			ntfs_log_trace("rl NULL, start_vcn %lld (should be > 0)\n",
 					(long long) start_vcn);
 //			errno = EINVAL;
-			rls = -EINVAL
+			rls = -EINVAL;
 			goto errno_set;
 		}
 		rls = 1;
@@ -1342,7 +1342,7 @@ int ntfs_get_size_for_mapping_pairs(const ntfs_volume *vol,
 		rl++;
 	if ((!rl->length && start_vcn > rl->vcn) || start_vcn < rl->vcn) {
 //		errno = EINVAL;
-		rls = -EINVAL
+		rls = -EINVAL;
 		goto errno_set;
 	}
 	prev_lcn = 0;
