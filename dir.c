@@ -687,7 +687,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 #endif
 
 	if (!vol || !pathname) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);
 	}
 	
