@@ -731,18 +731,19 @@ static int ntfs_inode_sync_standard_information(ntfs_inode *ni)
 	STANDARD_INFORMATION *std_info;
 	u32 lth;
 	le32 lthle;
+	int ret;
 
 	ntfs_log_trace("Entering for inode %lld\n", (long long)ni->mft_no);
 
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx)
-		return -1;
-	if (ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
-			     0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		return -ENOMEM;
+	if ((ret = ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
+			     0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 		ntfs_log_perror("Failed to sync standard info (inode %lld)",
 				(long long)ni->mft_no);
 		ntfs_attr_put_search_ctx(ctx);
-		return -1;
+		return ret;
 	}
 	std_info = (STANDARD_INFORMATION *)((u8 *)ctx->attr +
 			le16_to_cpu(ctx->attr->value_offset));
@@ -950,22 +951,22 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 
 	/* Update STANDARD_INFORMATION. */
 	if ((ni->mrec->flags & MFT_RECORD_IN_USE) && ni->nr_extents != -1 &&
-			ntfs_inode_sync_standard_information(ni)) {
-		if (!err || errno == EIO) {
-			err = errno;
-			if (err != EIO)
-				err = EBUSY;
+			(ret = ntfs_inode_sync_standard_information(ni))) {
+		if (!err || ret == -EIO) {
+			err = ret;
+			if (err != -EIO)
+				err = -EBUSY;
 		}
 	}
 
 	/* Update FILE_NAME's in the index. */
 	if ((ni->mrec->flags & MFT_RECORD_IN_USE) && ni->nr_extents != -1 &&
 			NInoFileNameTestAndClearDirty(ni) &&
-			ntfs_inode_sync_file_name(ni, dir_ni)) {
-		if (!err || errno == EIO) {
-			err = errno;
-			if (err != EIO)
-				err = EBUSY;
+			(ret = ntfs_inode_sync_file_name(ni, dir_ni))) {
+		if (!err || ret == -EIO) {
+			err = ret;
+			if (err != -EIO)
+				err = -EBUSY;
 		}
 		ntfs_log_perror("Failed to sync FILE_NAME (inode %lld)",
 				(long long)ni->mft_no);
@@ -978,11 +979,12 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 		ntfs_attr *na;
 
 		na = ntfs_attr_open(ni, AT_ATTRIBUTE_LIST, AT_UNNAMED, 0);
-		if (!na) {
-			if (!err || errno == EIO) {
-				err = errno;
-				if (err != EIO)
-					err = EBUSY;
+		if (IS_ERR(na)) {
+			ret = PTR_ERR(na);
+			if (!err || ret == -EIO) {
+				err = ret;
+				if (err != -EIO)
+					err = -EBUSY;
 				ntfs_log_perror("Attribute list sync failed "
 						"(open, inode %lld)",
 						(long long)ni->mft_no);
@@ -992,12 +994,12 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 		} 
 		
 		if (na->data_size == ni->attr_list_size) {
-			if (ntfs_attr_pwrite(na, 0, ni->attr_list_size,
-				        ni->attr_list) != ni->attr_list_size) {
-				if (!err || errno == EIO) {
-					err = errno;
-					if (err != EIO)
-						err = EBUSY;
+			if ((ret = ntfs_attr_pwrite(na, 0, ni->attr_list_size,
+				        ni->attr_list) != ni->attr_list_size)) {
+				if (!err || ret == -EIO) {
+					err = ret;
+					if (err != -EIO)
+						err = -EBUSY;
 					ntfs_log_perror("Attribute list sync "
 						"failed (write, inode %lld)",
 						(long long)ni->mft_no);
@@ -1016,12 +1018,17 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 sync_inode:
 	/* Write this inode out to the $MFT (and $MFTMirr if applicable). */
 	if (NInoTestAndClearDirty(ni)) {
-		if (ntfs_mft_record_write(ni->vol, ni->mft_no, ni->mrec)) {
-			if (!err || errno == EIO) {
-				err = errno;
-				if (err != EIO)
-					err = EBUSY;
+		if ((ret = ntfs_mft_record_write(ni->vol, ni->mft_no, ni->mrec))) {
+			if (!err || ret == -EIO) {
+				err = ret;
+				if (err != -EIO)
+					err = -EBUSY;
 			}
+//			if (!err || errno == EIO) {
+//				err = errno;
+//				if (err != EIO)
+//	//				err = EBUSY;
+//			}
 			NInoSetDirty(ni);
 			ntfs_log_perror("MFT record sync failed, inode %lld",
 					(long long)ni->mft_no);
@@ -1039,12 +1046,12 @@ sync_inode:
 			if (!NInoTestAndClearDirty(eni))
 				continue;
 			
-			if (ntfs_mft_record_write(eni->vol, eni->mft_no, 
-						  eni->mrec)) {
-				if (!err || errno == EIO) {
-					err = errno;
-					if (err != EIO)
-						err = EBUSY;
+			if ((ret = ntfs_mft_record_write(eni->vol, eni->mft_no, 
+						  eni->mrec))) {
+				if (!err || ret == -EIO) {
+					err = ret;
+					if (err != -EIO)
+						err = -EBUSY;
 				}
 				NInoSetDirty(eni);
 				ntfs_log_perror("Extent MFT record sync failed,"
@@ -1055,13 +1062,13 @@ sync_inode:
 		}
 	}
 
-	if (err) {
-		errno = err;
-		ret = -1;
-	}
+//	if (err) {
+//		errno = err;
+//		ret = -1;
+//	}
 	
 	ntfs_log_leave("\n");
-	return ret;
+	return err;
 }
 
 int ntfs_inode_sync(ntfs_inode *ni)
@@ -1107,32 +1114,32 @@ int ntfs_inode_add_attrlist(ntfs_inode *ni)
 	ntfs_attr *na;
 
 	if (!ni) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
-		return -1;
+		return -EINVAL;
 	}
 
 	ntfs_log_trace("inode %llu\n", (unsigned long long) ni->mft_no);
 
 	if (NInoAttrList(ni) || ni->nr_extents) {
-		errno = EEXIST;
+//		errno = EEXIST;
 		ntfs_log_perror("Inode already has attribute list");
-		return -1;
+		return -EEXIST;
 	}
 
 	/* Form attribute list. */
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx) {
-		err = errno;
+		err = -ENOMEM;
 		goto err_out;
 	}
 	/* Walk through all attributes. */
-	while (!ntfs_attr_lookup(AT_UNUSED, NULL, 0, 0, 0, NULL, 0, ctx)) {
+	while (!(err = ntfs_attr_lookup(AT_UNUSED, NULL, 0, 0, 0, NULL, 0, ctx))) {
 		
 		int ale_size;
 		
 		if (ctx->attr->type == AT_ATTRIBUTE_LIST) {
-			err = EIO;
+			err = -EIO;
 			ntfs_log_perror("Attribute list already present");
 			goto put_err_out;
 		}
@@ -1143,7 +1150,7 @@ int ntfs_inode_add_attrlist(ntfs_inode *ni)
 		
 		aln = ntfs_realloc(al, al_len);
 		if (!aln) {
-			err = errno;
+			err = -ENOMEM;
 			ntfs_log_perror("Failed to realloc %d bytes", al_len);
 			goto put_err_out;
 		}
@@ -1171,8 +1178,8 @@ int ntfs_inode_add_attrlist(ntfs_inode *ni)
 		ale = (ATTR_LIST_ENTRY *)(al + al_len);
 	}
 	/* Check for real error occurred. */
-	if (errno != ENOENT) {
-		err = errno;
+	if (err != -ENOENT) {
+//		err = errno;
 		ntfs_log_perror("%s: Attribute lookup failed, inode %lld",
 				__FUNCTION__, (long long)ni->mft_no);
 		goto put_err_out;
@@ -1188,32 +1195,32 @@ int ntfs_inode_add_attrlist(ntfs_inode *ni)
 	if (le32_to_cpu(ni->mrec->bytes_allocated) -
 			le32_to_cpu(ni->mrec->bytes_in_use) <
 			offsetof(ATTR_RECORD, resident_end)) {
-		if (ntfs_inode_free_space(ni,
-				offsetof(ATTR_RECORD, resident_end))) {
+		if ((err = ntfs_inode_free_space(ni,
+				offsetof(ATTR_RECORD, resident_end)))) {
 			/* Failed to free space. */
-			err = errno;
+//			err = errno;
 			ntfs_log_perror("Failed to free space for attrlist");
 			goto rollback;
 		}
 	}
 
 	/* Add $ATTRIBUTE_LIST to mft record. */
-	if (ntfs_resident_attr_record_add(ni,
-				AT_ATTRIBUTE_LIST, NULL, 0, NULL, 0, const_cpu_to_le16(0)) < 0) {
-		err = errno;
+	if ((err = ntfs_resident_attr_record_add(ni,
+				AT_ATTRIBUTE_LIST, NULL, 0, NULL, 0, const_cpu_to_le16(0)) < 0)) {
+//		err = errno;
 		ntfs_log_perror("Couldn't add $ATTRIBUTE_LIST to MFT");
 		goto rollback;
 	}
 
 	/* Resize it. */
 	na = ntfs_attr_open(ni, AT_ATTRIBUTE_LIST, AT_UNNAMED, 0);
-	if (!na) {
-		err = errno;
+	if (IS_ERR(na)) {
+		err = PTR_ERR(na);
 		ntfs_log_perror("Failed to open just added $ATTRIBUTE_LIST");
 		goto remove_attrlist_record;
 	}
-	if (ntfs_attr_truncate(na, al_len)) {
-		err = errno;
+	if ((err = ntfs_attr_truncate(na, al_len))) {
+//		err = errno;
 		ntfs_log_perror("Failed to resize just added $ATTRIBUTE_LIST");
 		ntfs_attr_close(na);
 		goto remove_attrlist_record;;
@@ -1271,8 +1278,8 @@ put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
 err_out:
 	free(al);
-	errno = err;
-	return -1;
+//	errno = err;
+	return err;
 }
 
 /**
@@ -1360,7 +1367,7 @@ put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
 	if (err == -ENOSPC)
 		ntfs_log_trace("No attributes left that could be moved out.\n");
-	return -1;
+	return err;
 }
 
 /**
