@@ -37,13 +37,20 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 		return NULL;
 
 	inode_set_iversion(&ni->vfs_inode, 1);
+	inode_init_once(&ni->vfs_inode);
 	return &ni->vfs_inode;
+}
+
+static void ntfs_i_callback(struct rcu_head *head)
+{
+	struct inode *inode = container_of(head, struct inode, i_rcu);
+	kfree(EXNTFS_I(inode));
 }
 
 static void ntfs_destroy_inode(struct inode *inode)
 {
 	ntfs_log_debug("%s\n", __func__);
-	kfree(EXNTFS_I(inode));
+	call_rcu(&inode->i_rcu, ntfs_i_callback);
 }
 
 static int ntfs_write_inode(struct inode *inode, struct writeback_control *wbc)
@@ -62,7 +69,7 @@ static void ntfs_evict_inode(struct inode *inode)
 	invalidate_inode_buffers(inode);
 	clear_inode(inode);
 
-	remove_inode_hash(inode);
+//	remove_inode_hash(inode);
 }
 
 static void ntfs_put_super(struct super_block *sb)
@@ -120,13 +127,28 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
 	ntfs_log_debug("%s\n", __func__);
+	struct inode *inode;
+//	return ERR_PTR(-EOPNOTSUPP);
 	ntfs_inode *ni = EXNTFS_I(dir);
 	ni = ntfs_pathname_to_inode(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
 	if (!IS_ERR(ni)) {
 		ntfs_log_debug("error\n");
+		inode = &ni->vfs_inode;
+		inode_init_once(inode);
+		inode_init_always(ni->vol->sb, inode);
+		inode->i_size = ni->data_size;
+		inode->i_ino = ni->mft_no;
+		inode->i_blocks = ni->allocated_size >> 9;
+		inode_set_iversion(inode, 1);
+		INIT_LIST_HEAD(&inode->i_sb_list);
+		if (ni->flags & FILE_ATTR_DIRECTORY)
+			inode->i_mode |= S_IFDIR;
+		else
+			inode->i_mode |= S_IFREG;
+		inode_sb_list_add(inode);
 //		ntfs_inode_close(ni);
-		return d_splice_alias(&ni->vfs_inode, dentry);
+		return d_splice_alias(inode, dentry);
 	}
 
 	return (void *)ni;
@@ -268,7 +290,7 @@ static int ntfs_read_root(struct inode *inode)
 	inode->i_generation = 0;
 	inode_inc_iversion(inode);
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
-
+	unlock_new_inode(inode);
 	return 0;
 }
 
@@ -294,7 +316,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	ni = ntfs_inode_open(vol, FILE_root);
 	if (!ni)
 		goto error_exit;
-
+	ntfs_log_debug("############ size=%lld\n", ni->data_size);
 	ctx = ntfs_attr_get_search_ctx(ni, ni->mrec);
 	if (!ctx) {
 		ntfs_log_perror("ntfs_attr_get_search_ctx\n");
@@ -312,6 +334,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	a = ctx->attr;
 	ntfs_log_debug("%d, %d\n", __LINE__, a->non_resident);
 	root_inode = &ni->vfs_inode;
+	inode_init_once(root_inode);
 	inode_init_always(sb, root_inode);
 	root_inode->i_size = sle64_to_cpu(a->data_size);
 	root_inode->i_ino = FILE_root;
@@ -335,7 +358,6 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	return 0;
 
 error_exit:
-
 	ntfs_log_debug("ntfs mount failed\n");
 	if (vol)
 		ntfs_umount(vol, false);
@@ -371,6 +393,7 @@ out:
 static void __exit exit_ntfs_fs(void)
 {
 	unregister_filesystem(&ntfs_fs_type);
+	rcu_barrier();
 }
 MODULE_AUTHOR("zhangl");
 MODULE_DESCRIPTION("NTFS Filesystem based on ntfs-3g");
