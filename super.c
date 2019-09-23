@@ -165,7 +165,7 @@ static const struct address_space_operations minix_aops = {
 };
 #endif
 
-#if 1
+#if 0
 static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {
@@ -334,6 +334,24 @@ const struct file_operations ntfs_dir_operations = {
 #endif
 };
 
+static void ntfs_set_inode(struct inode *inode, dev_t rdev)
+{
+	if (S_ISREG(inode->i_mode)) {
+//		inode->i_op = &minix_file_inode_operations;
+//		inode->i_fop = &minix_file_operations;
+//		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISDIR(inode->i_mode)) {
+		inode->i_op = &ntfs_dir_inode_operations;;
+		inode->i_fop = &ntfs_dir_operations;
+//		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISLNK(inode->i_mode)) {
+//		inode->i_op = &minix_symlink_inode_operations;
+//		inode_nohighmem(inode);
+//		inode->i_mapping->a_ops = &minix_aops;
+	} else
+		init_special_inode(inode, inode->i_mode, rdev);
+}
+
 static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 				struct inode *inode, const MFT_REF mref)
 {
@@ -462,10 +480,13 @@ get_size:
 		inode->i_size = ni->data_size;
 		set_nino_flag(ni,KnownSize);
 	}
-	if (ni->flags & FILE_ATTR_DIRECTORY)
+	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
+		ntfs_log_leave("is FILE_ATTR_DIRECTORY\n");
 		inode->i_mode = S_IFDIR;
-	else
+	} else {
 		inode->i_mode = S_IFREG;
+		ntfs_log_leave("is S_IFREG\n");
+	}
 
 	set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
 	/* Everyone gets all permissions. */
@@ -477,7 +498,7 @@ get_size:
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 	ntfs_attr_put_search_ctx(ctx);
 out:
-	ntfs_log_leave("\n");
+	ntfs_log_leave("ni %p\n", ni);
 	return ni;
 
 put_err_out:
@@ -549,7 +570,8 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_op = &ntfs_sops;
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_max_links = 10000;
-
+	NVolClearShowSysFiles(vol);
+	NVolClearShowHidFiles(vol);
 #if 0
 	ni = ntfs_inode_open(vol, FILE_root);
 	if (!ni)

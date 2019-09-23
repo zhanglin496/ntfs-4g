@@ -1027,10 +1027,13 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 					fn->file_name_type, *pos,
 					mref, dt_type);
 		} else {
-			loname = (ntfschar*)ntfs_malloc(2*fn->file_name_length);
+			res = 4*fn->file_name_length;
+			loname = (ntfschar*)ntfs_malloc(res);
 			if (loname) {
-				int len = ntfs_ucstonls(dir_ni->vol, fn->file_name,
-			                 fn->file_name_length, (void *)&loname, 2*fn->file_name_length);
+				int len = ntfs_ucstombs(fn->file_name, fn->file_name_length,
+						(void *)&loname, res);
+//				int len = ntfs_ucstonls(dir_ni->vol, fn->file_name,
+//			                 fn->file_name_length, (void *)&loname, 2*fn->file_name_length);
 				if (len > 0)
 					res = filldir(dirent, loname,
 						len, fn->file_name_type, *pos,
@@ -1052,7 +1055,7 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 		}
 	} else
 		res = 0;
-	return (res);
+	return res;
 }
 
 /**
