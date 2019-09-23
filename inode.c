@@ -127,9 +127,14 @@ static void __ntfs_inode_release(ntfs_inode *ni)
 		ntfs_log_error("Releasing dirty inode %lld!\n", 
 			       (long long)ni->mft_no);
 	if (NInoAttrList(ni) && ni->attr_list)
-		free(ni->attr_list);
-	free(ni->mrec);
-	free(ni);
+		kfree(ni->attr_list);
+	kfree(ni->mrec);
+	kfree(ni);
+}
+
+void ntfs_inode_release(ntfs_inode *ni)
+{
+	__ntfs_inode_release(ni);
 }
 
 /**

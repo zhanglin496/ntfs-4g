@@ -45,7 +45,8 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 static void ntfs_i_callback(struct rcu_head *head)
 {
 	struct inode *inode = container_of(head, struct inode, i_rcu);
-	kfree(EXNTFS_I(inode));
+	ntfs_inode *ni = EXNTFS_I(inode)
+	ntfs_inode_release(ni);
 }
 
 static void ntfs_destroy_inode(struct inode *inode)

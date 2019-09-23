@@ -67,6 +67,8 @@ extern int ntfs_file_record_read(const ntfs_volume *vol, const MFT_REF mref,
 extern int ntfs_mft_records_write(const ntfs_volume *vol, const MFT_REF mref,
 		const s64 count, MFT_RECORD *b);
 
+void ntfs_inode_release(ntfs_inode *ni);
+
 /**
  * ntfs_mft_record_write - write an mft record to disk
  * @vol:	volume to write to
