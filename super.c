@@ -27,6 +27,7 @@
 #include "layout.h"
 #include "bootsect.h"
 #include "dir.h"
+#include "misc.h"
 
 static struct inode *ntfs_alloc_inode(struct super_block *sb)
 {
@@ -123,6 +124,7 @@ static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	return -EOPNOTSUPP;
 }
 
+#if 0
 static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {
@@ -140,6 +142,7 @@ static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 	} else
 		init_special_inode(inode, inode->i_mode, rdev);
 }
+#endif
 
 
 static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
@@ -441,7 +444,7 @@ static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino)
 	struct inode *inode;
 	ntfs_inode *ni;
 
-	inode = iget_locked(sb->s_fs_info, ino);
+	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 	if (!(inode->i_state & I_NEW))
@@ -449,6 +452,7 @@ static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino)
 
 	if (!ntfs_inode_get(sb, inode, ino))
 		goto error_exit;
+	unlock_new_inode(inode);
 	return inode;
 
 error_exit:
