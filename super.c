@@ -123,12 +123,195 @@ static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	return -EOPNOTSUPP;
 }
 
+static void ntfs_set_inode(struct inode *inode, dev_t rdev)
+{
+	if (S_ISREG(inode->i_mode)) {
+		inode->i_op = &minix_file_inode_operations;
+		inode->i_fop = &minix_file_operations;
+		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISDIR(inode->i_mode)) {
+		inode->i_op = &minix_dir_inode_operations;
+		inode->i_fop = &minix_dir_operations;
+		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &minix_symlink_inode_operations;
+		inode_nohighmem(inode);
+		inode->i_mapping->a_ops = &minix_aops;
+	} else
+		init_special_inode(inode, inode->i_mode, rdev);
+}
+
+static ntfs_inode *ntfs_inode_get(struct super_block *sb,
+				struct inode *inode, const MFT_REF mref)
+{
+	s64 l;
+	ntfs_inode *ni;
+	ntfs_attr_search_ctx *ctx;
+	STANDARD_INFORMATION *std_info;
+	le32 lthle;
+	int err;
+	ntfs_volume *vol = sb->s_fs_info;
+	ni = EXNTFS_I(inode);
+
+	if (!(inode->i_state & I_NEW)) {
+		err = -EINVAL;
+		goto err_out;
+	}
+
+	ntfs_log_enter("Entering for inode %lld\n", (long long)MREF(mref));
+	if (!vol) {
+		err = -EINVAL;
+		goto err_out;
+	}
+//	ni = __ntfs_inode_allocate(vol);
+//	if (!ni)
+//		goto out;
+	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
+		goto err_out;
+	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
+		err = -ENOENT;
+		goto err_out;
+	}
+	ni->mft_no = MREF(mref);
+	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	if (!ctx)
+		goto err_out;
+	/* Receive some basic information about inode. */
+	if (ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
+				0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		if (!ni->mrec->base_mft_record)
+			ntfs_log_perror("No STANDARD_INFORMATION in base record"
+					" %lld", (long long)MREF(mref));
+		goto put_err_out;
+	}
+	std_info = (STANDARD_INFORMATION *)((u8 *)ctx->attr +
+			le16_to_cpu(ctx->attr->value_offset));
+	ni->flags = std_info->file_attributes;
+	ni->creation_time = std_info->creation_time;
+	ni->last_data_change_time = std_info->last_data_change_time;
+	ni->last_mft_change_time = std_info->last_mft_change_time;
+	ni->last_access_time = std_info->last_access_time;
+  		/* JPA insert v3 extensions if present */
+                /* length may be seen as 72 (v1.x) or 96 (v3.x) */
+	lthle = ctx->attr->length;
+	if (le32_to_cpu(lthle) > sizeof(STANDARD_INFORMATION)) {
+		set_nino_flag(ni, v3_Extensions);
+		ni->owner_id = std_info->owner_id;
+		ni->security_id = std_info->security_id;
+		ni->quota_charged = std_info->quota_charged;
+		ni->usn = std_info->usn;
+	} else {
+		clear_nino_flag(ni, v3_Extensions);
+		ni->owner_id = const_cpu_to_le32(0);
+		ni->security_id = const_cpu_to_le32(0);
+	}
+	/* Set attribute list information. */
+	if ((err = ntfs_attr_lookup(AT_ATTRIBUTE_LIST, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx))) {
+		if (err != -ENOENT)
+			goto put_err_out;
+		/* Attribute list attribute does not present. */
+		/* restore previous errno to avoid misinterpretation */
+		goto get_size;
+	}
+	NInoSetAttrList(ni);
+	l = ntfs_get_attribute_value_length(ctx->attr);
+	if (!l)
+		goto put_err_out;
+	if (l > 0x40000) {
+		err = -EIO;
+		ntfs_log_perror("Too large attrlist attribute (%lld), inode "
+				"%lld", (long long)l, (long long)MREF(mref));
+		goto put_err_out;
+	}
+	ni->attr_list_size = l;
+	ni->attr_list = ntfs_malloc(ni->attr_list_size);
+	if (!ni->attr_list)
+		goto put_err_out;
+	l = ntfs_get_attribute_value(vol, ctx->attr, ni->attr_list);
+	if (!l)
+		goto put_err_out;
+	if (l != ni->attr_list_size) {
+		err = -EIO;
+		ntfs_log_perror("Unexpected attrlist size (%lld <> %u), inode "
+				"%lld", (long long)l, ni->attr_list_size, 
+				(long long)MREF(mref));
+		goto put_err_out;
+	}
+get_size:
+	if ((err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx))) {
+		if (err != -ENOENT)
+			goto put_err_out;
+		if ((err = ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
+				0, ctx))) {
+			ntfs_log_perror("Index root attribute missing in directory inode "
+					"%lld", (unsigned long long)ni->mft_no);
+			goto put_err_out;
+		}
+		inode->i_mode = S_IFDIR;
+		inode->i_op = &ntfs_dir_inode_operations;
+		inode->i_fop = &ntfs_dir_operations;
+		inode->i_size = sle64_to_cpu(ctx->attr->data_size);
+		/* Directory or special file. */
+		/* restore previous errno to avoid misinterpretation */
+		ni->data_size = ni->allocated_size = 0;
+	} else {
+		if (ctx->attr->non_resident) {
+			ni->data_size = sle64_to_cpu(ctx->attr->data_size);
+			if (ctx->attr->flags &
+					(ATTR_IS_COMPRESSED | ATTR_IS_SPARSE))
+				ni->allocated_size = sle64_to_cpu(
+						ctx->attr->compressed_size);
+			else
+				ni->allocated_size = sle64_to_cpu(
+						ctx->attr->allocated_size);
+		} else {
+			ni->data_size = le32_to_cpu(ctx->attr->value_length);
+			ni->allocated_size = (ni->data_size + 7) & ~7;
+		}
+		inode->i_size = ni->data_size;
+		set_nino_flag(ni,KnownSize);
+	}
+	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
+	ntfs_attr_put_search_ctx(ctx);
+out:	
+	ntfs_log_leave("\n");
+	return ni;
+
+put_err_out:
+	ntfs_attr_put_search_ctx(ctx);
+err_out:
+//	__ntfs_inode_release(ni);
+	ni = NULL;
+	goto out;
+}
+
+static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino)
+{
+	struct inode *inode;
+	ntfs_inode *ni;
+
+	inode = iget_locked(sb->s_fs_info, ino);
+	if (!inode)
+		return ERR_PTR(-ENOMEM);
+	if (!(inode->i_state & I_NEW))
+		return inode;
+
+	if (!ntfs_inode_get(sb, inode, ino))
+		goto error_exit;
+	return inode;
+
+error_exit:
+	iget_failed(inode);
+	return ERR_PTR(-EIO);
+}
+
 static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
 	ntfs_log_debug("%s\n", __func__);
 	struct inode *inode;
-//	return ERR_PTR(-EOPNOTSUPP);
+	return ERR_PTR(-EOPNOTSUPP);
 	ntfs_inode *ni = EXNTFS_I(dir);
 	ni = ntfs_pathname_to_inode(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
@@ -313,6 +496,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_max_links = 10000;
 
+#if 0
 	ni = ntfs_inode_open(vol, FILE_root);
 	if (!ni)
 		goto error_exit;
@@ -350,6 +534,10 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 
 	ntfs_log_debug("%d\n", __LINE__);
 	insert_inode_hash(root_inode);
+#endif
+	root_inode = ntfs_iget(sb, FILE_root);
+	if (IS_ERR(root_inode))
+		goto error_exit;
 	sb->s_root = d_make_root(root_inode);
 	if (!sb->s_root)
 		goto error_exit;
