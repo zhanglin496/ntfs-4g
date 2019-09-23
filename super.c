@@ -125,21 +125,61 @@ static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	return -EOPNOTSUPP;
 }
 
+
 #if 0
+static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
+{
+	return block_write_full_page(page, minix_get_block, wbc);
+}
+
+static int ntfs_readpage(struct file *file, struct page *page)
+{
+	return block_read_full_page(page,minix_get_block);
+}
+
+static int ntfs_write_begin(struct file *file, struct address_space *mapping,
+			loff_t pos, unsigned len, unsigned flags,
+			struct page **pagep, void **fsdata)
+{
+	int ret;
+
+	ret = block_write_begin(mapping, pos, len, flags, pagep,
+				minix_get_block);
+	if (unlikely(ret))
+		minix_write_failed(mapping, pos + len);
+
+	return ret;
+}
+
+static sector_t ntfs_bmap(struct address_space *mapping, sector_t block)
+{
+	return generic_block_bmap(mapping,block,minix_get_block);
+}
+
+static const struct address_space_operations minix_aops = {
+	.readpage = ntfs_readpage,
+	.writepage = ntfs_writepage,
+	.write_begin = ntfs_write_begin,
+	.write_end = generic_write_end,
+	.bmap = ntfs_bmap
+};
+#endif
+
+#if 1
 static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {
-		inode->i_op = &minix_file_inode_operations;
-		inode->i_fop = &minix_file_operations;
-		inode->i_mapping->a_ops = &minix_aops;
+//		inode->i_op = &minix_file_inode_operations;
+//		inode->i_fop = &minix_file_operations;
+//		inode->i_mapping->a_ops = &minix_aops;
 	} else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &minix_dir_inode_operations;
-		inode->i_fop = &minix_dir_operations;
-		inode->i_mapping->a_ops = &minix_aops;
+		inode->i_op = &ntfs_dir_inode_operations;;
+		inode->i_fop = &ntfs_dir_operations;
+//		inode->i_mapping->a_ops = &minix_aops;
 	} else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &minix_symlink_inode_operations;
-		inode_nohighmem(inode);
-		inode->i_mapping->a_ops = &minix_aops;
+//		inode->i_op = &minix_symlink_inode_operations;
+//		inode_nohighmem(inode);
+//		inode->i_mapping->a_ops = &minix_aops;
 	} else
 		init_special_inode(inode, inode->i_mode, rdev);
 }
@@ -272,8 +312,7 @@ static int __ntfs_readdir(struct file *filp, struct dir_context *ctx)
 	cpos = ctx->pos;
 
 	ret = ntfs_readdir(EXNTFS_I(inode), &cpos, ctx, ntfs_filldir);
-	if (!ret)
-		ctx->pos = cpos;
+	ctx->pos = cpos;
 	ntfs_log_debug("%s, ret=%d\n", __func__, ret);
 	return ret;
 }
@@ -331,8 +370,8 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 	if (!ctx)
 		goto err_out;
 	/* Receive some basic information about inode. */
-	if (ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
-				0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+	if ((err = ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
+				0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 		if (!ni->mrec->base_mft_record)
 			ntfs_log_perror("No STANDARD_INFORMATION in base record"
 					" %lld", (long long)MREF(mref));
@@ -402,9 +441,6 @@ get_size:
 					"%lld", (unsigned long long)ni->mft_no);
 			goto put_err_out;
 		}
-		inode->i_mode = S_IFDIR;
-		inode->i_op = &ntfs_dir_inode_operations;
-		inode->i_fop = &ntfs_dir_operations;
 		inode->i_size = sle64_to_cpu(ctx->attr->data_size);
 		/* Directory or special file. */
 		/* restore previous errno to avoid misinterpretation */
@@ -426,9 +462,21 @@ get_size:
 		inode->i_size = ni->data_size;
 		set_nino_flag(ni,KnownSize);
 	}
+	if (ni->flags & FILE_ATTR_DIRECTORY)
+		inode->i_mode = S_IFDIR;
+	else
+		inode->i_mode = S_IFREG;
+
+	set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
+	/* Everyone gets all permissions. */
+	inode->i_mode |= S_IRWXUGO;
+	/* If read-only, no one gets write permissions. */
+	if (IS_RDONLY(inode))
+		inode->i_mode &= ~S_IWUGO;
+	ntfs_set_inode(inode, sb->s_dev);
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 	ntfs_attr_put_search_ctx(ctx);
-out:	
+out:
 	ntfs_log_leave("\n");
 	return ni;
 
@@ -553,8 +601,10 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 
 error_exit:
 	ntfs_log_debug("ntfs mount failed\n");
-	if (vol)
+	if (vol) {
+		sb->s_fs_info = NULL;
 		ntfs_umount(vol, false);
+	}
 	return ret;
 }
 
