@@ -186,33 +186,126 @@ static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 #endif
 
 
+ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
+		const char *pathname)
+{
+	u64 inum;
+	int len, err = 0;
+	char *p, *q;
+	ntfs_inode *ni;
+	struct inode *inode;
+	ntfs_inode *result = NULL;
+	ntfschar *unicode = NULL;
+	char *ascii = NULL;
+
+	if (!vol || !pathname) {
+//		errno = EINVAL;
+		return ERR_PTR(-EINVAL);
+	}
+	
+	ntfs_log_trace("path: '%s'\n", pathname);
+	
+//	ascii = strdup(pathname);
+//	if (!ascii) {
+//		ntfs_log_error("Out of memory.\n");
+//		err = -ENOMEM;
+//		goto out;
+//	}
+
+	p = pathname;
+//	/* Remove leading /'s. */	
+//	while (p && *p && *p == PATH_SEP)
+//		p++;
+	if (parent) {
+		ni = parent;
+	} else {
+		ni = ntfs_inode_open(vol, FILE_root);
+		if (IS_ERR(ni)) {
+			ntfs_log_debug("Couldn't open the inode of the root "
+					"directory.\n");
+			err = -EIO;
+			result = (ntfs_inode*)NULL;
+			goto out;
+		}
+	}
+
+//	while (p && *p) {
+		/* Find the end of the first token. */
+//		q = strchr(p, PATH_SEP);
+	//	if (q != NULL) {
+//			*q = '\0';
+//		}
+		len = ntfs_mbstoucs(p, &unicode);
+		if (len < 0) {
+			ntfs_log_perror("Could not convert filename to Unicode:"
+					" '%s'", p);
+			err = len;
+			goto close;
+		} else if (len > NTFS_MAX_NAME_LEN) {
+			err = -ENAMETOOLONG;
+			goto close;
+		}
+		inum = ntfs_inode_lookup_by_name(ni, unicode, len);
+		if ((s64)inum == (s64) -ENOENT) {
+			ntfs_log_debug("Couldn't find name '%s' in pathname "
+					"'%s'.\n", p, pathname);
+			err = -ENOENT;
+			goto close;
+		}
+		if ((s64)inum < 0)
+			goto close;
+		if (ni != parent)
+			if (ntfs_inode_close(ni)) {
+				err = -EIO;
+//				err = errno;
+				goto out;
+			}
+
+		inum = MREF(inum);
+		inode = ntfs_iget(vol->sb, inum);
+		if (IS_ERR(inode)) {
+			ntfs_log_debug("Cannot open inode %llu: %s.\n",
+					(unsigned long long)inum, p);
+			err = -EIO;
+			goto close;
+		}
+		ni = EXNTFS_I(inode);
+		free(unicode);
+		unicode = NULL;
+
+//		if (q)
+//			*q++ = PATH_SEP; /* JPA */
+//		p = q;
+//		while (p && *p && *p == PATH_SEP)
+//			p++;
+//	}
+
+	result = ni;
+	ni = NULL;
+close:
+	if (ni && (ni != parent))
+		if (ntfs_inode_close(ni) && !err)
+			;
+//			err = errno;
+out:
+	free(ascii);
+	free(unicode);
+//	if (err)
+//		errno = err;
+	return result ? : ERR_PTR(err);
+}
+
 static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
-	ntfs_log_debug("%s\n", __func__);
+	ntfs_log_debug("%s, name=%s\n", __func__, dentry->d_name.name);
 	struct inode *inode;
 	return ERR_PTR(-EOPNOTSUPP);
 	ntfs_inode *ni = EXNTFS_I(dir);
-	ni = ntfs_pathname_to_inode(ni->vol, ni, dentry->d_name.name);
+	ni = ntfs_pathname_to_inode2(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
-	if (!IS_ERR(ni)) {
-		ntfs_log_debug("error\n");
-		inode = &ni->vfs_inode;
-		inode_init_once(inode);
-		inode_init_always(ni->vol->sb, inode);
-		inode->i_size = ni->data_size;
-		inode->i_ino = ni->mft_no;
-		inode->i_blocks = ni->allocated_size >> 9;
-		inode_set_iversion(inode, 1);
-		INIT_LIST_HEAD(&inode->i_sb_list);
-		if (ni->flags & FILE_ATTR_DIRECTORY)
-			inode->i_mode |= S_IFDIR;
-		else
-			inode->i_mode |= S_IFREG;
-		inode_sb_list_add(inode);
-//		ntfs_inode_close(ni);
+	if (!IS_ERR(ni))
 		return d_splice_alias(inode, dentry);
-	}
 
 	return (void *)ni;
 }
