@@ -538,9 +538,9 @@ get_size:
 		inode->i_mode &= ~S_IWUGO;
 	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
 		ntfs_log_leave("is FILE_ATTR_DIRECTORY\n");
-		inode->i_mode = S_IFDIR;
+		inode->i_mode |= S_IFDIR;
 	} else {
-		inode->i_mode = S_IFREG;
+		inode->i_mode |= S_IFREG;
 		ntfs_log_leave("is S_IFREG\n");
 	}
 	ntfs_attr_reinit_search_ctx(ctx);
