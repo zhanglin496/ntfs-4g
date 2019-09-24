@@ -427,7 +427,7 @@ struct XATTRMAPPING *ntfs_xattr_build_mapping(ntfs_volume *vol,
 			notfound = TRUE;
 	} else {
 		ni = ntfs_pathname_to_inode(vol, NULL, xattrmap_path);
-		if (ni) {
+		if (!IS_ERR(ni)) {
 			firstmapping = ntfs_read_xattr_mapping(localread, ni);
 			ntfs_inode_close(ni);
 		} else

@@ -1003,8 +1003,8 @@ static int upgrade_secur_desc(ntfs_volume *vol,
 			} else {
 				ntfs_log_error("Failed to upgrade "
 					"standard informations\n");
-				errno = EIO;
-				res = -1;
+//				errno = EIO;
+				res = -EIO;
 			}
 		} else
 			res = -1;
@@ -2291,7 +2291,7 @@ int ntfs_open_secure(ntfs_volume *vol)
 		return 0;
 
 	ni = ntfs_pathname_to_inode(vol, NULL, "$Secure");
-	if (!ni)
+	if (IS_ERR(ni))
 		goto err;
 
 	if (ni->mft_no != FILE_Secure) {
@@ -2706,7 +2706,7 @@ int ntfs_get_file_security(struct SECURITY_API *scapi,
 	res = 0; /* default return */
 	if (scapi && (scapi->magic == MAGIC_API)) {
 		ni = ntfs_pathname_to_inode(scapi->security.vol, NULL, path);
-		if (ni) {
+		if (!IS_ERR(ni)) {
 			attr = getsecurityattr(scapi->security.vol, ni);
 			if (attr) {
 				if (feedsecurityattr(attr,selection,
@@ -2774,7 +2774,7 @@ int ntfs_set_file_security(struct SECURITY_API *scapi,
 		    && ntfs_valid_descr(attr, attrsz)) {
 			ni = ntfs_pathname_to_inode(scapi->security.vol,
 				NULL, path);
-			if (ni) {
+			if (!IS_ERR(ni)) {
 				oldattr = getsecurityattr(scapi->security.vol,
 						ni);
 				if (oldattr) {
@@ -2823,7 +2823,7 @@ int ntfs_get_file_attributes(struct SECURITY_API *scapi, const char *path)
 	attrib = -1; /* default return */
 	if (scapi && (scapi->magic == MAGIC_API) && path) {
 		ni = ntfs_pathname_to_inode(scapi->security.vol, NULL, path);
-		if (ni) {
+		if (!IS_ERR(ni)) {
 			attrib = le32_to_cpu(ni->flags);
 			if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY)
 				attrib |= const_le32_to_cpu(FILE_ATTR_DIRECTORY);
@@ -2870,7 +2870,7 @@ BOOL ntfs_set_file_attributes(struct SECURITY_API *scapi,
 	res = 0; /* default return */
 	if (scapi && (scapi->magic == MAGIC_API) && path) {
 		ni = ntfs_pathname_to_inode(scapi->security.vol, NULL, path);
-		if (ni) {
+		if (!IS_ERR(ni)) {
 			settable = FILE_ATTR_SETTABLE;
 			if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
 				/*
@@ -2916,7 +2916,7 @@ BOOL ntfs_read_directory(struct SECURITY_API *scapi,
 	ok = FALSE; /* default return */
 	if (scapi && (scapi->magic == MAGIC_API) && callback) {
 		ni = ntfs_pathname_to_inode(scapi->security.vol, NULL, path);
-		if (ni) {
+		if (!IS_ERR(ni)) {
 			if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
 				pos = 0;
 				ntfs_readdir(ni,&pos,context,callback);
