@@ -582,7 +582,9 @@ get_size:
 	}
 	set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
 	ntfs_set_inode(inode, sb->s_dev);
-	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
+	inode->i_mtime = timespec_to_timespec64(ntfs2timespec(ni->last_mft_change_time));
+	inode->i_atime = timespec_to_timespec64(ntfs2timespec(ni->last_access_time));
+	inode->i_ctime = timespec_to_timespec64(ntfs2timespec(ni->last_data_change_time));
 	ntfs_attr_put_search_ctx(ctx);
 out:
 	ntfs_log_leave("ni %p\n", ni);
