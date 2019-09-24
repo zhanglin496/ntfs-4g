@@ -29,6 +29,8 @@
 #include "dir.h"
 #include "misc.h"
 
+static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino);
+
 static struct inode *ntfs_alloc_inode(struct super_block *sb)
 {
 	ntfs_log_debug("%s\n", __func__);
@@ -300,7 +302,6 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 {
 	ntfs_log_debug("%s, name=%s\n", __func__, dentry->d_name.name);
 	struct inode *inode;
-	return ERR_PTR(-EOPNOTSUPP);
 	ntfs_inode *ni = EXNTFS_I(dir);
 	ni = ntfs_pathname_to_inode2(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
