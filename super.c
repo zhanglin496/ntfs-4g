@@ -193,6 +193,7 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 {
 	u64 inum;
 	int len, err = 0;
+	char *p;
 	ntfs_inode *ni;
 	struct inode *inode;
 	ntfs_inode *result = NULL;
@@ -543,7 +544,7 @@ get_size:
 		ntfs_log_leave("is S_IFREG\n");
 	}
 	ntfs_attr_reinit_search_ctx(ctx);
-	if (S_IFDIR(inode->i_mode)) {
+	if (S_ISDIR(inode->i_mode)) {
 		if ((err = ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
 				0, ctx))) {
 			ntfs_log_perror("Index root attribute missing in directory inode "
