@@ -1031,7 +1031,7 @@ sync_inode:
 //			if (!err || errno == EIO) {
 //				err = errno;
 //				if (err != EIO)
-//	//				err = EBUSY;
+//					err = EBUSY;
 //			}
 			NInoSetDirty(ni);
 			ntfs_log_perror("MFT record sync failed, inode %lld",

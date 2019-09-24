@@ -4317,8 +4317,8 @@ int ntfs_attr_add(ntfs_inode *ni, ATTR_TYPES type,
 	/* There is no extent that contain enough space for new attribute. */
 	if (!NInoAttrList(ni)) {
 		/* Add attribute list not present, add it and retry. */
-		if (ntfs_inode_add_attrlist(ni)) {
-			err = errno;
+		if ((err = ntfs_inode_add_attrlist(ni))) {
+//			err = errno;
 			ntfs_log_perror("Failed to add attribute list");
 			goto err_out;
 		}
@@ -4326,8 +4326,9 @@ int ntfs_attr_add(ntfs_inode *ni, ATTR_TYPES type,
 	}
 	/* Allocate new extent. */
 	attr_ni = ntfs_mft_record_alloc(ni->vol, ni);
-	if (!attr_ni) {
-		err = errno;
+	if (IS_ERR(attr_ni)) {
+//		err = errno;
+		err = PTR_ERR(attr_ni);
 		ntfs_log_perror("Failed to allocate extent record");
 		goto err_out;
 	}
@@ -4636,7 +4637,7 @@ int ntfs_attr_record_move_to(ntfs_attr_search_ctx *ctx, ntfs_inode *ni)
 	a = ctx->attr;
 	nctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!nctx)
-		return -1;
+		return -ENOMEM;
 
 	/*
 	 * Use ntfs_attr_find instead of ntfs_attr_lookup to find place for
@@ -4757,9 +4758,9 @@ int ntfs_attr_record_move_away(ntfs_attr_search_ctx *ctx, int extra)
 	 * new extent and move attribute to it.
 	 */
 	ni = ntfs_mft_record_alloc(base_ni->vol, base_ni);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Couldn't allocate MFT record");
-		return -1;
+		return PTR_ERR(ni);
 	}
 	if (ntfs_attr_record_move_to(ctx, ni)) {
 		ntfs_log_perror("Couldn't move attribute to MFT record");
@@ -5192,20 +5193,20 @@ static int ntfs_resident_attr_resize_i(ntfs_attr *na, const s64 newsize,
 		ni = na->ni;
 	if (!NInoAttrList(ni)) {
 		ntfs_attr_put_search_ctx(ctx);
-		if (ntfs_inode_add_attrlist(ni))
-			return -1;
+		if ((err = ntfs_inode_add_attrlist(ni)))
+			return err;
 		return ntfs_resident_attr_resize_i(na, newsize, holes);
 	}
 	/* Allocate new mft record. */
 	ni = ntfs_mft_record_alloc(vol, ni);
-	if (!ni) {
-		err = errno;
+	if (IS_ERR(ni)) {
+		err = PTR_ERR(ni);
 		ntfs_log_perror("Couldn't allocate new MFT record");
 		goto put_err_out;
 	}
 	/* Move attribute to it. */
-	if (ntfs_attr_record_move_to(ctx, ni)) {
-		err = errno;
+	if ((err = ntfs_attr_record_move_to(ctx, ni))) {
+//		err = errno;
 		ntfs_log_perror("Couldn't move attribute to new MFT record");
 		goto put_err_out;
 	}
@@ -5227,8 +5228,8 @@ resize_done:
 	return 0;
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
-	errno = err;
-	return ret;
+//	errno = err;
+	return err;
 }
 
 static int ntfs_resident_attr_resize(ntfs_attr *na, const s64 newsize)
@@ -5805,7 +5806,7 @@ retry:
 			if (ntfs_attr_record_resize(m, a,
 					le16_to_cpu(a->mapping_pairs_offset) +
 					mp_size)) {
-				errno = EIO;
+				err = -EIO;
 				ntfs_log_perror("Failed to resize attribute");
 				goto put_err_out;
 			}
@@ -5825,22 +5826,22 @@ retry:
 		 * Generate the new mapping pairs array directly into the
 		 * correct destination, i.e. the attribute record itself.
 		 */
-		if (!ntfs_mapping_pairs_build(na->ni->vol, (u8*)a + le16_to_cpu(
+		if (!(err = ntfs_mapping_pairs_build(na->ni->vol, (u8*)a + le16_to_cpu(
 				a->mapping_pairs_offset), mp_size, na->rl,
-				stop_vcn, &stop_rl))
+				stop_vcn, &stop_rl))_)
 			finished_build = TRUE;
 		if (stop_rl)
 			stop_vcn = stop_rl->vcn;
 		else
 			stop_vcn = 0;
-		if (!finished_build && errno != ENOSPC) {
+		if (!finished_build && err != -ENOSPC) {
 			ntfs_log_perror("Failed to build mapping pairs");
 			goto put_err_out;
 		}
 		a->highest_vcn = cpu_to_sle64(stop_vcn - 1);
 	}
 	/* Check whether error occurred. */
-	if (errno != ENOENT) {
+	if (err != ENOENT) {
 		ntfs_log_perror("%s: Attribute lookup failed", __FUNCTION__);
 		goto put_err_out;
 	}
@@ -5852,8 +5853,8 @@ retry:
 		le16 spcomp;
 
 		ntfs_attr_reinit_search_ctx(ctx);
-		if (!ntfs_attr_lookup(na->type, na->name, na->name_len,
-				CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		if (!(err = ntfs_attr_lookup(na->type, na->name, na->name_len,
+				CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 			a = ctx->attr;
 			a->allocated_size = cpu_to_sle64(na->allocated_size);
 			spcomp = na->data_flags
@@ -5877,8 +5878,8 @@ retry:
 	if (finished_build) {
 		ntfs_attr_reinit_search_ctx(ctx);
 		ntfs_log_trace("Deallocate marked extents.\n");
-		while (!ntfs_attr_lookup(na->type, na->name, na->name_len,
-				CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		while (!(err = ntfs_attr_lookup(na->type, na->name, na->name_len,
+				CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 			if (sle64_to_cpu(ctx->attr->highest_vcn) !=
 							NTFS_VCN_DELETE_MARK)
 				continue;
@@ -5889,7 +5890,7 @@ retry:
 			}
 			ntfs_attr_reinit_search_ctx(ctx);
 		}
-		if (errno != ENOENT) {
+		if (err != -ENOENT) {
 			ntfs_log_perror("%s: Attr lookup failed", __FUNCTION__);
 			goto put_err_out;
 		}
@@ -5907,6 +5908,7 @@ retry:
 						na->rl, stop_vcn, INT_MAX);
 		if (mp_size <= 0) {
 			ntfs_log_perror("%s: get mp size failed", __FUNCTION__);
+			err = mp_size;
 			goto put_err_out;
 		}
 		/* Allocate new mft record, with special case for mft itself */
@@ -5915,7 +5917,7 @@ retry:
 				na->type == AT_DATA);
 		else
 			ni = ntfs_mft_record_alloc(na->ni->vol, base_ni);
-		if (!ni) {
+		if (IS_ERR(ni)) {
 			ntfs_log_perror("Could not allocate new MFT record");
 			goto put_err_out;
 		}
@@ -5937,12 +5939,12 @@ retry:
 		err = ntfs_non_resident_attr_record_add(ni, na->type,
 			na->name, na->name_len, stop_vcn, mp_size,
 			na->data_flags);
-		if (err == -1) {
-			err = errno;
+		if (err < 0) {
+//			err = errno;
 			ntfs_log_perror("Could not add attribute extent");
 			if (ntfs_mft_record_free(na->ni->vol, ni))
 				ntfs_log_perror("Could not free MFT record");
-			errno = err;
+//			errno = err;
 			goto put_err_out;
 		}
 		a = (ATTR_RECORD*)((u8*)m + err);
@@ -5954,12 +5956,12 @@ retry:
 			stop_vcn = stop_rl->vcn;
 		else
 			stop_vcn = 0;
-		if (err < 0 && errno != ENOSPC) {
-			err = errno;
+		if (err < 0 && err != -ENOSPC) {
+//			err = errno;
 			ntfs_log_perror("Failed to build MP");
 			if (ntfs_mft_record_free(na->ni->vol, ni))
 				ntfs_log_perror("Couldn't free MFT record");
-			errno = err;
+//			errno = err;
 			goto put_err_out;
 		}
 		a->highest_vcn = cpu_to_sle64(stop_vcn - 1);
@@ -5976,6 +5978,7 @@ out:
 put_err_out:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
+	ret = err;
 	goto out;
 }
 #undef NTFS_VCN_DELETE_MARK

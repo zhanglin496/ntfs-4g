@@ -1542,7 +1542,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	}
 	
 	ni = ntfs_mft_record_alloc(dir_ni->vol, NULL);
-	if (!ni)
+	if (IS_ERR(ni))
 		return ERR_PTR(-ENOMEM);
 #if CACHE_NIDATA_SIZE
 	ntfs_inode_invalidate(dir_ni->vol, ni->mft_no);

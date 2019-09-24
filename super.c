@@ -167,27 +167,6 @@ static const struct address_space_operations minix_aops = {
 };
 #endif
 
-#if 0
-static void ntfs_set_inode(struct inode *inode, dev_t rdev)
-{
-	if (S_ISREG(inode->i_mode)) {
-//		inode->i_op = &minix_file_inode_operations;
-//		inode->i_fop = &minix_file_operations;
-//		inode->i_mapping->a_ops = &minix_aops;
-	} else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ntfs_dir_inode_operations;;
-		inode->i_fop = &ntfs_dir_operations;
-//		inode->i_mapping->a_ops = &minix_aops;
-	} else if (S_ISLNK(inode->i_mode)) {
-//		inode->i_op = &minix_symlink_inode_operations;
-//		inode_nohighmem(inode);
-//		inode->i_mapping->a_ops = &minix_aops;
-	} else
-		init_special_inode(inode, inode->i_mode, rdev);
-}
-#endif
-
-
 ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 		const char *pathname)
 {
@@ -626,20 +605,6 @@ static void print_hex(void *data, int len)
 	printk("\n");
 }
 
-static int ntfs_read_root(struct inode *inode)
-{
-	inode->i_mode = S_IFDIR;
-	inode->i_state = I_NEW;
-	inode->i_op = &ntfs_dir_inode_operations;
-	inode->i_fop = &ntfs_dir_operations;
-
-	inode->i_generation = 0;
-	inode_inc_iversion(inode);
-	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
-	unlock_new_inode(inode);
-	return 0;
-}
-
 static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	ntfs_volume *vol;
@@ -660,45 +625,6 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_max_links = 10000;
 	NVolClearShowSysFiles(vol);
 	NVolClearShowHidFiles(vol);
-#if 0
-	ni = ntfs_inode_open(vol, FILE_root);
-	if (!ni)
-		goto error_exit;
-	ntfs_log_debug("############ size=%lld\n", ni->data_size);
-	ctx = ntfs_attr_get_search_ctx(ni, ni->mrec);
-	if (!ctx) {
-		ntfs_log_perror("ntfs_attr_get_search_ctx\n");
-		goto error_exit;
-	}
-
-	/* Find the index root attribute in the mft record. */
-	if (ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
-			0, ctx)) {
-		ntfs_log_perror("Index root attribute missing in directory inode "
-				"%lld", (unsigned long long)ni->mft_no);
-		goto error_exit;
-	}
-
-	a = ctx->attr;
-	ntfs_log_debug("%d, %d\n", __LINE__, a->non_resident);
-	root_inode = &ni->vfs_inode;
-	inode_init_once(root_inode);
-	inode_init_always(sb, root_inode);
-	root_inode->i_size = sle64_to_cpu(a->data_size);
-	root_inode->i_ino = FILE_root;
-	root_inode->i_blocks = ni->allocated_size >> 9;
-	inode_set_iversion(root_inode, 1);
-	INIT_LIST_HEAD(&root_inode->i_sb_list);
-	inode_sb_list_add(root_inode);
-	ntfs_attr_put_search_ctx(ctx);	
-	ntfs_log_debug("%d, size=%llu\n", __LINE__, root_inode->i_size);
-	ret = ntfs_read_root(root_inode);
-	if (ret < 0)
-		goto error_exit;
-
-	ntfs_log_debug("%d\n", __LINE__);
-	insert_inode_hash(root_inode);
-#endif
 	root_inode = ntfs_iget(sb, FILE_root);
 	if (IS_ERR(root_inode))
 		goto error_exit;
@@ -749,7 +675,7 @@ static void __exit exit_ntfs_fs(void)
 	unregister_filesystem(&ntfs_fs_type);
 	rcu_barrier();
 }
-MODULE_AUTHOR("zhangl");
+MODULE_AUTHOR("zhanglin496@163.com");
 MODULE_DESCRIPTION("NTFS Filesystem based on ntfs-3g");
 MODULE_LICENSE("GPL");
 module_init(init_ntfs_fs)
