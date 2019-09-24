@@ -994,7 +994,7 @@ static int update_reparse_data(ntfs_inode *ni, ntfs_index_context *xr,
 
 	res = 0;
 	na = ntfs_attr_open(ni, AT_REPARSE_POINT, AT_UNNAMED, 0);
-	if (na) {
+	if (IS_ERR(na)) {
 			/* remove the existing reparse data */
 		oldsize = remove_reparse_index(na,xr,&reparse_tag);
 		if (oldsize < 0)
@@ -1052,7 +1052,7 @@ int ntfs_delete_reparse_index(ntfs_inode *ni)
 
 	res = 0;
 	na = ntfs_attr_open(ni, AT_REPARSE_POINT, AT_UNNAMED, 0);
-	if (na) {
+	if (IS_ERR(na)) {
 			/*
 			 * read the existing reparse data (the tag is enough)
 			 * and un-index it
@@ -1204,7 +1204,7 @@ int ntfs_remove_ntfs_reparse_data(ntfs_inode *ni)
 		 */
 		na = ntfs_attr_open(ni, AT_REPARSE_POINT,
 			AT_UNNAMED,0);
-		if (na) {
+		if (IS_ERR(na)) {
 			/* first remove index (reparse data needed) */
 			xr = open_reparse_index(ni->vol);
 			if (xr) {
@@ -1245,15 +1245,15 @@ int ntfs_remove_ntfs_reparse_data(ntfs_inode *ni)
 			if (errno == ENOENT)
 				errno = olderrno;
 		} else {
-			errno = ENODATA;
-			res = -1;
+//			errno = ENODATA;
+			res = -ENODATA;
 		}
 		NInoSetDirty(ni);
 	} else {
-		errno = EINVAL;
-		res = -1;
+//		errno = EINVAL;
+		res = -EINVAL;
 	}
-	return (res ? -1 : 0);
+	return res ;
 }
 
 

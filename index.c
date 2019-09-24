@@ -922,7 +922,7 @@ static int ntfs_ibm_modify(ntfs_index_context *icx, VCN vcn, int set)
 	ntfs_log_trace("%s vcn: %lld\n", set ? "set" : "clear", (long long)vcn);
 	
 	na = ntfs_attr_open(icx->ni, AT_BITMAP,  icx->name, icx->name_len);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open $BITMAP attribute");
 		return -1;
 	}

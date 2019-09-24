@@ -330,7 +330,7 @@ static int update_object_id(ntfs_inode *ni, ntfs_index_context *xo,
 	res = 0;
 
 	na = ntfs_attr_open(ni, AT_OBJECT_ID, AT_UNNAMED, 0);
-	if (na) {
+	if (IS_ERR(na)) {
 
 			/* remove the existing index entry */
 		oldsize = remove_object_id_index(na,xo,&old_attr);
@@ -427,7 +427,7 @@ int ntfs_delete_object_id_index(ntfs_inode *ni)
 
 	res = 0;
 	na = ntfs_attr_open(ni, AT_OBJECT_ID, AT_UNNAMED, 0);
-	if (na) {
+	if (IS_ERR(na)) {
 			/*
 			 * read the existing object id
 			 * and un-index it
@@ -576,7 +576,7 @@ int ntfs_remove_ntfs_object_id(ntfs_inode *ni)
 		 */
 		na = ntfs_attr_open(ni, AT_OBJECT_ID,
 			AT_UNNAMED,0);
-		if (na) {
+		if (IS_ERR(na)) {
 			/* first remove index (old object id needed) */
 			xo = open_object_id_index(ni->vol);
 			if (xo) {

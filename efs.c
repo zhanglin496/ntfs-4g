@@ -156,11 +156,11 @@ static int fixup_loop(ntfs_inode *ni)
 			na = ntfs_attr_open(ctx->ntfs_ino, AT_DATA,
 				(ntfschar*)((u8*)a + le16_to_cpu(a->name_offset)),
 				a->name_length);
-			if (!na) {
+			if (IS_ERR(na)) {
 				ntfs_log_error("can't open DATA Attribute\n");
 				res = -1;
 			}
-			if (na && !(ctx->attr->flags & ATTR_IS_ENCRYPTED)) {
+			if (!IS_ERR(na) && !(ctx->attr->flags & ATTR_IS_ENCRYPTED)) {
 				if (!NAttrNonResident(na)
 				   && ntfs_attr_make_non_resident(na, ctx)) {
 				/*

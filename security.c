@@ -645,7 +645,7 @@ static le32 entersecurityattr(ntfs_volume *vol,
 		 */
 		securid = const_cpu_to_le32(0);
 		na = ntfs_attr_open(vol->secure_ni,AT_INDEX_ROOT,sii_stream,4);
-		if (na) {
+		if (IS_ERR(na)) {
 			if ((size_t)na->data_size < (sizeof(struct SII)
 					+ sizeof(INDEX_ENTRY_HEADER))) {
 				ntfs_log_error("Creating the first security_id\n");
@@ -857,7 +857,7 @@ static int update_secur_descr(ntfs_volume *vol,
 
 		/* update the old security attribute */
 		na = ntfs_attr_open(ni, AT_SECURITY_DESCRIPTOR, AT_UNNAMED, 0);
-		if (na) {
+		if (!IS_ERR(na)) {
 			/* resize attribute */
 			res = ntfs_attr_truncate(na, (s64) newattrsz);
 			/* overwrite value */
@@ -879,7 +879,7 @@ static int update_secur_descr(ntfs_volume *vol,
 			/* as v1.x though volume is formatted for v3.x */
 			na = ntfs_attr_open(ni, AT_STANDARD_INFORMATION,
 				AT_UNNAMED, 0);
-			if (na) {
+			if (!IS_ERR(na)) {
 				clear_nino_flag(ni, v3_Extensions);
 			/*
 			 * Truncating the record does not sweep extensions
@@ -912,7 +912,7 @@ static int update_secur_descr(ntfs_volume *vol,
 		if (securid) {
 			na = ntfs_attr_open(ni, AT_STANDARD_INFORMATION,
 				AT_UNNAMED, 0);
-			if (na) {
+			if (!IS_ERR(na)) {
 				res = 0;
 				if (!test_nino_flag(ni, v3_Extensions)) {
 			/* expand standard information attribute to v3.x */
@@ -988,7 +988,7 @@ static int upgrade_secur_desc(ntfs_volume *vol,
 		if (securid) {
 			na = ntfs_attr_open(ni, AT_STANDARD_INFORMATION,
 				AT_UNNAMED, 0);
-			if (na) {
+			if (!IS_ERR(na)) {
 			/* expand standard information attribute to v3.x */
 				res = ntfs_attr_truncate(na,
 					 (s64)sizeof(STANDARD_INFORMATION));
