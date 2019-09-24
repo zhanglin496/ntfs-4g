@@ -9,5 +9,9 @@ static inline ntfs_inode *EXNTFS_I(struct inode *inode)
 	return container_of(inode, ntfs_inode, vfs_inode);
 }
 
+static inline struct inode *EXNTFS_V(ntfs_inode *ni)
+{
+	return &ni->vfs_inode;
+}
 
 #endif

@@ -313,6 +313,8 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 
 static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
 {
+	ntfs_log_debug("%s\n", __func__);
+
 	return -EOPNOTSUPP;
 }
 
@@ -428,11 +430,25 @@ const struct file_operations ntfs_dir_operations = {
 #endif
 };
 
+const struct inode_operations ntfs_file_inode_operations = {
+	.setattr	= ntfs_setattr,
+	.getattr	= ntfs_getattr,
+};
+
+const struct file_operations ntfs_file_operations = {
+	.llseek		= generic_file_llseek,
+	.read_iter	= generic_file_read_iter,
+	.write_iter	= generic_file_write_iter,
+	.mmap		= generic_file_mmap,
+	.fsync		= generic_file_fsync,
+	.splice_read	= generic_file_splice_read,
+};
+
 static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {
-//		inode->i_op = &minix_file_inode_operations;
-//		inode->i_fop = &minix_file_operations;
+		inode->i_op = &ntfs_file_inode_operations;
+		inode->i_fop = &ntfs_file_operations;
 //		inode->i_mapping->a_ops = &minix_aops;
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &ntfs_dir_inode_operations;;
