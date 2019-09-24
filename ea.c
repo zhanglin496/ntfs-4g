@@ -143,9 +143,9 @@ static int ntfs_update_ea(ntfs_inode *ni, const char *value, size_t size,
 
 	res = 0;
 	nai = ntfs_attr_open(ni, AT_EA_INFORMATION, AT_UNNAMED, 0);
-	if (nai) {
+	if (!IS_ERR(nai)) {
 		na = ntfs_attr_open(ni, AT_EA, AT_UNNAMED, 0);
-		if (na) {
+		if (!IS_ERR(na)) {
 				/*
 				 * Set EA_INFORMATION first, it is easier to
 				 * restore the old value, if setting EA fails.
@@ -169,7 +169,7 @@ static int ntfs_update_ea(ntfs_inode *ni, const char *value, size_t size,
 		}
 		ntfs_attr_close(nai);
 	} else {
-		res = -errno;
+		res = PTR_ERR(nai);
 	}
 	return (res);
 }
@@ -351,9 +351,9 @@ int ntfs_remove_ntfs_ea(ntfs_inode *ni)
 		 * open and delete the EA_INFORMATION and the EA
 		 */
 		nai = ntfs_attr_open(ni, AT_EA_INFORMATION, AT_UNNAMED, 0);
-		if (nai) {
+		if (!IS_ERR(nai)) {
 			na = ntfs_attr_open(ni, AT_EA, AT_UNNAMED, 0);
-			if (na) {
+			if (!IS_ERR(na)) {
 				/* Try to save the old EA_INFORMATION */
 				old_ea_info = ntfs_attr_readall(ni,
 					 AT_EA_INFORMATION,
@@ -384,13 +384,13 @@ int ntfs_remove_ntfs_ea(ntfs_inode *ni)
 			}
 			ntfs_attr_close(nai);
 		} else {
-			errno = ENODATA;
-			res = -1;
+//			errno = ENODATA;
+			res = -ENODATA;
 		}
 		NInoSetDirty(ni);
 	} else {
-		errno = EINVAL;
-		res = -1;
+//		errno = EINVAL;
+		res = -EINVAL;
 	}
-	return (res ? -1 : 0);
+	return res;
 }

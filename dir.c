@@ -833,7 +833,8 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		free(unicode);
 		unicode = NULL;
 
-		if (q) *q++ = PATH_SEP; /* JPA */
+		if (q)
+			*q++ = PATH_SEP; /* JPA */
 		p = q;
 		while (p && *p && *p == PATH_SEP)
 			p++;

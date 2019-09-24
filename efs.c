@@ -266,7 +266,7 @@ int ntfs_set_efs_info(ntfs_inode *ni, const char *value, size_t size,
 			 */
 			na = ntfs_attr_open(ni, AT_LOGGED_UTILITY_STREAM,
 				logged_utility_stream_name, 4);
-			if (na) {
+			if (!IS_ERR(na)) {
 				/* resize attribute */
 				res = ntfs_attr_truncate(na, (s64)size);
 				/* overwrite value if any */

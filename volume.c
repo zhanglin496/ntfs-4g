@@ -837,7 +837,7 @@ static int fix_txf_data(ntfs_volume *vol)
 	} else {
 		/* Get the $TXF_DATA attribute */
 		na = ntfs_attr_open(ni, AT_LOGGED_UTILITY_STREAM, TXF_DATA, 9);
-		if (na) {
+		if (!IS_ERR(na)) {
 			if (NAttrNonResident(na)) {
 				/*
 				 * Fix the attribute by truncating, then
@@ -1009,7 +1009,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	}
 	
 	vol->lcnbmp_na = ntfs_attr_open(vol->lcnbmp_ni, AT_DATA, AT_UNNAMED, 0);
-	if (!vol->lcnbmp_na) {
+	if (IS_ERR(vol->lcnbmp_na)) {
 		ntfs_log_perror("Failed to open ntfs attribute");
 		goto error_exit;
 	}
@@ -1030,7 +1030,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	}
 	/* Get an ntfs attribute for $UpCase/$DATA. */
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open ntfs attribute");
 		goto error_exit;
 	}
@@ -1193,7 +1193,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	}
 	/* Get an ntfs attribute for $AttrDef/$DATA. */
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-	if (!na) {
+	if (IS_ERR(na)) {
 		ntfs_log_perror("Failed to open ntfs attribute");
 		goto error_exit;
 	}
@@ -1593,7 +1593,7 @@ int ntfs_logfile_reset(ntfs_volume *vol)
 	}
 
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-	if (!na) {
+	if (IS_ERR(na)) {
 		eo = errno;
 		ntfs_log_perror("Failed to open $FILE_LogFile/$DATA");
 		goto error_exit;

@@ -4374,8 +4374,8 @@ add_non_resident:
 
 	/* Open new attribute and resize it. */
 	na = ntfs_attr_open(ni, type, name, name_len);
-	if (!na) {
-		err = errno;
+	if (IS_ERR(na)) {
+		err = PTR_ERR(na);
 		ntfs_log_perror("Failed to open just added attribute");
 		goto rm_attr_err_out;
 	}
@@ -5105,8 +5105,8 @@ static int ntfs_resident_attr_resize_i(ntfs_attr *na, const s64 newsize,
 
 		tna = ntfs_attr_open(na->ni, a->type, (ntfschar*)((u8*)a +
 				le16_to_cpu(a->name_offset)), a->name_length);
-		if (!tna) {
-			err = errno;
+		if (IS_ERR(tna)) {
+			err = PTR_ERR(tna);
 			ntfs_log_perror("Couldn't open attribute");
 			goto put_err_out;
 		}
