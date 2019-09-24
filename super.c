@@ -549,9 +549,12 @@ get_size:
 				0, ctx))) {
 			ntfs_log_perror("Index root attribute missing in directory inode "
 					"%lld", (unsigned long long)ni->mft_no);
-			goto put_err_out;
-		}
-		inode->i_size = sle64_to_cpu(ctx->attr->data_size);
+			if (err != -ENOENT)
+				goto put_err_out;
+			inode->i_size = 0;
+			ni->data_size = ni->allocated_size = 0;
+		} else
+			inode->i_size = sle64_to_cpu(ctx->attr->data_size);
 	} else {
 		if ((err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx))) {
 			if (err != -ENOENT)
