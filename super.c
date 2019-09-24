@@ -306,7 +306,7 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 	ni = ntfs_pathname_to_inode2(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
 	if (!IS_ERR(ni))
-		return d_splice_alias(inode, dentry);
+		return d_splice_alias(&ni->vfs_inode, dentry);
 
 	return (void *)ni;
 }
