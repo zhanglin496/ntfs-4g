@@ -456,9 +456,7 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 		err = -EINVAL;
 		goto err_out;
 	}
-//	ni = __ntfs_inode_allocate(vol);
-//	if (!ni)
-//		goto out;
+
 	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
 		goto err_out;
 	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
@@ -532,36 +530,11 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 		goto put_err_out;
 	}
 get_size:
-	if ((err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx))) {
-		if (err != -ENOENT)
-			goto put_err_out;
-		if ((err = ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
-				0, ctx))) {
-			ntfs_log_perror("Index root attribute missing in directory inode "
-					"%lld", (unsigned long long)ni->mft_no);
-			goto put_err_out;
-		}
-		inode->i_size = sle64_to_cpu(ctx->attr->data_size);
-		/* Directory or special file. */
-		/* restore previous errno to avoid misinterpretation */
-		ni->data_size = ni->allocated_size = 0;
-	} else {
-		if (ctx->attr->non_resident) {
-			ni->data_size = sle64_to_cpu(ctx->attr->data_size);
-			if (ctx->attr->flags &
-					(ATTR_IS_COMPRESSED | ATTR_IS_SPARSE))
-				ni->allocated_size = sle64_to_cpu(
-						ctx->attr->compressed_size);
-			else
-				ni->allocated_size = sle64_to_cpu(
-						ctx->attr->allocated_size);
-		} else {
-			ni->data_size = le32_to_cpu(ctx->attr->value_length);
-			ni->allocated_size = (ni->data_size + 7) & ~7;
-		}
-		inode->i_size = ni->data_size;
-		set_nino_flag(ni,KnownSize);
-	}
+	/* Everyone gets all permissions. */
+	inode->i_mode |= S_IRWXUGO;
+	/* If read-only, no one gets write permissions. */
+	if (IS_RDONLY(inode))
+		inode->i_mode &= ~S_IWUGO;
 	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY) {
 		ntfs_log_leave("is FILE_ATTR_DIRECTORY\n");
 		inode->i_mode = S_IFDIR;
@@ -569,13 +542,41 @@ get_size:
 		inode->i_mode = S_IFREG;
 		ntfs_log_leave("is S_IFREG\n");
 	}
-
+	ntfs_attr_reinit_search_ctx(ctx);
+	if (S_IFDIR(inode->i_mode)) {
+		if ((err = ntfs_attr_lookup(AT_INDEX_ALLOCATION, NTFS_INDEX_I30, 4, CASE_SENSITIVE, 0, NULL,
+				0, ctx))) {
+			ntfs_log_perror("Index root attribute missing in directory inode "
+					"%lld", (unsigned long long)ni->mft_no);
+			goto put_err_out;
+		}
+		inode->i_size = sle64_to_cpu(ctx->attr->data_size);
+	} else {
+		if ((err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0, 0, 0, NULL, 0, ctx))) {
+			if (err != -ENOENT)
+				goto put_err_out;
+			/* Directory or special file. */
+			/* restore previous errno to avoid misinterpretation */
+			ni->data_size = ni->allocated_size = 0;
+		} else {
+			if (ctx->attr->non_resident) {
+				ni->data_size = sle64_to_cpu(ctx->attr->data_size);
+				if (ctx->attr->flags &
+						(ATTR_IS_COMPRESSED | ATTR_IS_SPARSE))
+					ni->allocated_size = sle64_to_cpu(
+							ctx->attr->compressed_size);
+				else
+					ni->allocated_size = sle64_to_cpu(
+							ctx->attr->allocated_size);
+			} else {
+				ni->data_size = le32_to_cpu(ctx->attr->value_length);
+				ni->allocated_size = (ni->data_size + 7) & ~7;
+			}
+			inode->i_size = ni->data_size;
+			set_nino_flag(ni,KnownSize);
+		}
+	}
 	set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
-	/* Everyone gets all permissions. */
-	inode->i_mode |= S_IRWXUGO;
-	/* If read-only, no one gets write permissions. */
-	if (IS_RDONLY(inode))
-		inode->i_mode &= ~S_IWUGO;
 	ntfs_set_inode(inode, sb->s_dev);
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 	ntfs_attr_put_search_ctx(ctx);
@@ -586,7 +587,6 @@ out:
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
 err_out:
-//	__ntfs_inode_release(ni);
 	ni = NULL;
 	goto out;
 }
