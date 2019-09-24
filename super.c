@@ -193,7 +193,6 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 {
 	u64 inum;
 	int len, err = 0;
-	char *p, *q;
 	ntfs_inode *ni;
 	struct inode *inode;
 	ntfs_inode *result = NULL;
@@ -201,23 +200,12 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 	char *ascii = NULL;
 
 	if (!vol || !pathname) {
-//		errno = EINVAL;
 		return ERR_PTR(-EINVAL);
 	}
 	
 	ntfs_log_trace("path: '%s'\n", pathname);
-	
-//	ascii = strdup(pathname);
-//	if (!ascii) {
-//		ntfs_log_error("Out of memory.\n");
-//		err = -ENOMEM;
-//		goto out;
-//	}
 
 	p = pathname;
-//	/* Remove leading /'s. */	
-//	while (p && *p && *p == PATH_SEP)
-//		p++;
 	if (parent) {
 		ni = parent;
 	} else {
@@ -231,59 +219,46 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 		}
 	}
 
-//	while (p && *p) {
-		/* Find the end of the first token. */
-//		q = strchr(p, PATH_SEP);
-	//	if (q != NULL) {
-//			*q = '\0';
-//		}
-		len = ntfs_mbstoucs(p, &unicode);
-		if (len < 0) {
-			ntfs_log_perror("Could not convert filename to Unicode:"
-					" '%s'", p);
-			err = len;
-			goto close;
-		} else if (len > NTFS_MAX_NAME_LEN) {
-			err = -ENAMETOOLONG;
-			goto close;
-		}
-		inum = ntfs_inode_lookup_by_name(ni, unicode, len);
-		if ((s64)inum == (s64) -ENOENT) {
-			ntfs_log_debug("Couldn't find name '%s' in pathname "
-					"'%s'.\n", p, pathname);
-			err = -ENOENT;
-			goto close;
-		}
-		if ((s64)inum < 0)
-			goto close;
-		if (ni != parent)
-			if (ntfs_inode_close(ni)) {
-				err = -EIO;
-//				err = errno;
-				goto out;
-			}
-
-		inum = MREF(inum);
-		inode = ntfs_iget(vol->sb, inum);
-		if (IS_ERR(inode)) {
-			ntfs_log_debug("Cannot open inode %llu: %s.\n",
-					(unsigned long long)inum, p);
+	len = ntfs_mbstoucs(p, &unicode);
+	if (len < 0) {
+		ntfs_log_perror("Could not convert filename to Unicode:"
+				" '%s'", p);
+		err = len;
+		goto close;
+	} else if (len > NTFS_MAX_NAME_LEN) {
+		err = -ENAMETOOLONG;
+		goto close;
+	}
+	inum = ntfs_inode_lookup_by_name(ni, unicode, len);
+	if ((s64)inum == (s64) -ENOENT) {
+		ntfs_log_debug("Couldn't find name '%s' in pathname "
+				"'%s'.\n", p, pathname);
+		err = -ENOENT;
+		goto close;
+	}
+	if ((s64)inum < 0)
+		goto close;
+	if (ni != parent)
+		if (ntfs_inode_close(ni)) {
 			err = -EIO;
-			goto close;
+//				err = errno;
+			goto out;
 		}
-		ni = EXNTFS_I(inode);
-		free(unicode);
-		unicode = NULL;
 
-//		if (q)
-//			*q++ = PATH_SEP; /* JPA */
-//		p = q;
-//		while (p && *p && *p == PATH_SEP)
-//			p++;
-//	}
-
+	inum = MREF(inum);
+	inode = ntfs_iget(vol->sb, inum);
+	if (IS_ERR(inode)) {
+		ntfs_log_debug("Cannot open inode %llu: %s.\n",
+				(unsigned long long)inum, p);
+		err = -EIO;
+		goto close;
+	}
+	ni = EXNTFS_I(inode);
+	free(unicode);
+	unicode = NULL;
 	result = ni;
 	ni = NULL;
+
 close:
 	if (ni && (ni != parent))
 		if (ntfs_inode_close(ni) && !err)
@@ -292,8 +267,6 @@ close:
 out:
 	free(ascii);
 	free(unicode);
-//	if (err)
-//		errno = err;
 	return result ? : ERR_PTR(err);
 }
 
@@ -306,7 +279,7 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 	ni = ntfs_pathname_to_inode2(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
 	if (!IS_ERR(ni))
-		return d_splice_alias(&ni->vfs_inode, dentry);
+		return d_splice_alias(EXNTFS_V(ni), dentry);
 
 	return (void *)ni;
 }
@@ -353,11 +326,10 @@ static int ntfs_setattr(struct dentry *dentry, struct iattr *attr)
 static int ntfs_getattr(const struct path *path, struct kstat *stat,
 			 u32 request_mask, unsigned int flags)
 {
-	ntfs_log_debug("%s\n", __func__);
 	struct inode *inode = path->dentry->d_inode;
+	ntfs_log_debug("%s, ni=%p\n", __func__, EXNTFS_I(inode));
 
 	generic_fillattr(inode, stat);
-
 	return 0;
 }
 

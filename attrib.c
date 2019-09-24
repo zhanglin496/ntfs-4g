@@ -405,7 +405,7 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	ntfschar *newname = NULL;
 	ATTR_RECORD *a;
 	le16 cs;
-	int err;
+	int err = 0;
 
 	ntfs_log_enter("Entering for inode %lld, attr 0x%x.\n",
 		       (unsigned long long)ni->mft_no, le32_to_cpu(type));
@@ -527,9 +527,7 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	}
 	ntfs_attr_put_search_ctx(ctx);
 out:
-	if (!na)
-		ntfs_log_error("open err %d\n", err);
-	ntfs_log_leave("\n");
+	ntfs_log_error("open err %d\n", err);
 	return na ? : ERR_PTR(err);
 
 put_err_out:
