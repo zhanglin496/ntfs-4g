@@ -1595,9 +1595,9 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	   && (S_ISREG(type) || S_ISDIR(type)))
 		ni->flags |= FILE_ATTR_COMPRESSED;
 	/* Add STANDARD_INFORMATION to inode. */
-	if (ntfs_attr_add(ni, AT_STANDARD_INFORMATION, AT_UNNAMED, 0,
-			(u8*)si, si_len)) {
-		err = errno;
+	if ((err = ntfs_attr_add(ni, AT_STANDARD_INFORMATION, AT_UNNAMED, 0,
+			(u8*)si, si_len))) {
+//		err = errno;
 		ntfs_log_error("Failed to add STANDARD_INFORMATION "
 				"attribute.\n");
 		goto err_out;
@@ -1643,9 +1643,9 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 		ie->key_length = const_cpu_to_le16(0);
 		ie->ie_flags = INDEX_ENTRY_END;
 		/* Add INDEX_ROOT attribute to inode. */
-		if (ntfs_attr_add(ni, AT_INDEX_ROOT, NTFS_INDEX_I30, 4,
-				(u8*)ir, ir_len)) {
-			err = errno;
+		if ((err = ntfs_attr_add(ni, AT_INDEX_ROOT, NTFS_INDEX_I30, 4,
+				(u8*)ir, ir_len))) {
+//			err = errno;
 			free(ir);
 			ntfs_log_error("Failed to add INDEX_ROOT attribute.\n");
 			goto err_out;
@@ -1661,7 +1661,7 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 				data_len = offsetof(INTX_FILE, device_end);
 				data = ntfs_malloc(data_len);
 				if (!data) {
-					err = errno;
+					err = -ENOMEM;
 					goto err_out;
 				}
 				data->major = cpu_to_le64(major(dev));
@@ -1693,9 +1693,9 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 				break;
 		}
 		/* Add DATA attribute to inode. */
-		if (ntfs_attr_add(ni, AT_DATA, AT_UNNAMED, 0, (u8*)data,
-				data_len)) {
-			err = errno;
+		if ((err = ntfs_attr_add(ni, AT_DATA, AT_UNNAMED, 0, (u8*)data,
+				data_len))) {
+//			err = errno;
 			ntfs_log_error("Failed to add DATA attribute.\n");
 			free(data);
 			goto err_out;
@@ -1734,15 +1734,15 @@ static ntfs_inode *__ntfs_create(ntfs_inode *dir_ni, le32 securid,
 	}
 	memcpy(fn->file_name, name, name_len * sizeof(ntfschar));
 	/* Add FILE_NAME attribute to inode. */
-	if (ntfs_attr_add(ni, AT_FILE_NAME, AT_UNNAMED, 0, (u8*)fn, fn_len)) {
-		err = errno;
+	if ((err = ntfs_attr_add(ni, AT_FILE_NAME, AT_UNNAMED, 0, (u8*)fn, fn_len))) {
+//		err = errno;
 		ntfs_log_error("Failed to add FILE_NAME attribute.\n");
 		goto err_out;
 	}
 	/* Add FILE_NAME attribute to index. */
-	if (ntfs_index_add_filename(dir_ni, fn, MK_MREF(ni->mft_no,
-			le16_to_cpu(ni->mrec->sequence_number)))) {
-		err = errno;
+	if ((err = ntfs_index_add_filename(dir_ni, fn, MK_MREF(ni->mft_no,
+			le16_to_cpu(ni->mrec->sequence_number))))) {
+//		err = errno;
 		ntfs_log_perror("Failed to add entry to the index");
 		goto err_out;
 	}

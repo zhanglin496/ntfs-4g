@@ -4381,7 +4381,7 @@ add_non_resident:
 	/* Resize and set attribute value. */
 	if (ntfs_attr_truncate_i(na, size, HOLES_OK) ||
 			(val && (ntfs_attr_pwrite(na, 0, size, val) != size))) {
-		err = errno;
+		err = -EINVAL;
 		ntfs_log_perror("Failed to initialize just added attribute");
 		if (ntfs_attr_rm(na))
 			ntfs_log_perror("Failed to remove just added attribute");

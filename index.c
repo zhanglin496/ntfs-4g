@@ -1549,7 +1549,7 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 	if (!ni || !fn) {
 		ntfs_log_error("Invalid arguments.\n");
 //		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 	
 	fn_size = (fn->file_name_length * sizeof(ntfschar)) +
@@ -1558,7 +1558,7 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 	
 	ie = ntfs_calloc(ie_size);
 	if (!ie)
-		return -1;
+		return -ENOMEM;
 
 	ie->indexed_file = cpu_to_le64(mref);
 	ie->length 	 = cpu_to_le16(ie_size);
@@ -1566,8 +1566,10 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 	memcpy(&ie->key, fn, fn_size);
 	
 	icx = ntfs_index_ctx_get(ni, NTFS_INDEX_I30, 4);
-	if (!icx)
+	if (!icx) {
+		ret = -ENOMEM;
 		goto out;
+	}
 	
 	ret = ntfs_ie_add(icx, ie);
 //	err = errno;
