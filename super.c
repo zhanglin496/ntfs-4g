@@ -366,6 +366,7 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 		inode_sb_list_add(inode);
 		insert_inode_hash(inode);
 		d_instantiate(dentry, inode);
+		unlock_new_inode(inode);
 	}
 	ntfs_inode_mark_dirty(ni);
 	/* Done! */

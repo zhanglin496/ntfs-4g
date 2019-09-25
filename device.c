@@ -347,6 +347,7 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	struct buffer_head *bh;
 	sector_t sector;
 	struct super_block *sb  = (void *)dev;
+	return count;
 
 	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
 
