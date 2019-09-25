@@ -363,7 +363,6 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	}
 
 	sector = pos / NTFS_BLOCK_SIZE;
-//	NDevSetDirty(dev);
 	for (total = 0; count; count -= br, total += br) {
 		bh = sb_bread(sb, sector);
 		if (!bh)
@@ -377,24 +376,7 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		memcpy(bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE), b + total, br);
 		mark_buffer_dirty(bh);
 		brelse(bh);
-
-#if 0
-		/* If everything ok, continue. */
-		if (written > 0)
-			continue;
-		/*
-		 * If nothing written or error return number of bytes written.
-		 */
-		if (!written || total)
-			break;
-		/* Nothing written and error, return error status. */
-		total = written;
-		break;
-#endif
 	}
-//	if (NDevSync(dev) && total && dops->sync(dev)) {
-//		total--; /* on sync error, return partially written */
-//	}
 	ret = total;
 out:
 	return ret;

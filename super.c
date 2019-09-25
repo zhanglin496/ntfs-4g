@@ -526,8 +526,10 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 		err = -ENOENT;
 		goto close;
 	}
-	if ((s64)inum < 0)
+	if ((s64)inum < 0) {
+		err = inum;
 		goto close;
+	}
 	if (ni != parent)
 		if (ntfs_inode_close(ni)) {
 			err = -EIO;
