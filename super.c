@@ -81,6 +81,7 @@ static void ntfs_evict_inode(struct inode *inode)
 static void ntfs_put_super(struct super_block *sb)
 {
 	ntfs_log_debug("%s\n", __func__);
+	ntfs_umount(sb->s_fs_info, false);
 }
 
 static int ntfs_sync_fs(struct super_block *sb, int wait)
