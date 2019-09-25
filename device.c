@@ -576,14 +576,14 @@ s64 ntfs_cluster_write(const ntfs_volume *vol, const s64 lcn,
 
 	if (!vol || lcn < 0 || count < 0) {
 //		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 	if (vol->nr_clusters < lcn + count) {
 //		errno = ESPIPE;
 		ntfs_log_perror("Trying to write outside of volume "
 				"(%lld < %lld)", (long long)vol->nr_clusters,
 			        (long long)lcn + count);
-		return -1;
+		return -ESPIPE;
 	}
 	if (!NVolReadOnly(vol))
 		bw = ntfs_pwrite(vol->dev, lcn << vol->cluster_size_bits,
@@ -635,7 +635,7 @@ s64 ntfs_device_size_get(struct ntfs_device *dev, int block_size)
 
 	if (!dev || block_size <= 0 || (block_size - 1) & block_size) {
 //		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 #ifdef BLKGETSIZE64
 	{	u64 size;
@@ -734,7 +734,7 @@ s64 ntfs_device_partition_start_sector_get(struct ntfs_device *dev)
 {
 	if (!dev) {
 //		errno = EINVAL;
-		return -1;
+		return -EINVAL;
 	}
 #ifdef HDIO_GETGEO
 	{	struct hd_geometry geo;

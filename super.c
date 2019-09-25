@@ -424,15 +424,25 @@ out:
 }
 
 
-#if 0
+#if 1
+static int ntfs_get_block(struct inode *inode, sector_t block,
+		    struct buffer_head *bh_result, int create)
+{
+	return -EIO;
+}
+
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 {
-	return block_write_full_page(page, minix_get_block, wbc);
+	return -EIO;
+
+	return block_write_full_page(page, ntfs_get_block, wbc);
 }
 
 static int ntfs_readpage(struct file *file, struct page *page)
 {
-	return block_read_full_page(page,minix_get_block);
+	return -EIO;
+
+	return block_read_full_page(page, ntfs_get_block);
 }
 
 static int ntfs_write_begin(struct file *file, struct address_space *mapping,
@@ -440,21 +450,24 @@ static int ntfs_write_begin(struct file *file, struct address_space *mapping,
 			struct page **pagep, void **fsdata)
 {
 	int ret;
+	return -EIO;
 
 	ret = block_write_begin(mapping, pos, len, flags, pagep,
-				minix_get_block);
-	if (unlikely(ret))
-		minix_write_failed(mapping, pos + len);
+				ntfs_get_block);
+//	if (unlikely(ret))
+//		minix_write_failed(mapping, pos + len);
 
 	return ret;
 }
 
 static sector_t ntfs_bmap(struct address_space *mapping, sector_t block)
 {
-	return generic_block_bmap(mapping,block,minix_get_block);
+	return -EIO;
+
+	return generic_block_bmap(mapping, block, ntfs_get_block);
 }
 
-static const struct address_space_operations minix_aops = {
+static const struct address_space_operations ntfs_aops = {
 	.readpage = ntfs_readpage,
 	.writepage = ntfs_writepage,
 	.write_begin = ntfs_write_begin,
@@ -698,11 +711,11 @@ static void ntfs_set_inode(struct inode *inode, dev_t rdev)
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ntfs_file_inode_operations;
 		inode->i_fop = &ntfs_file_operations;
-//		inode->i_mapping->a_ops = &minix_aops;
+		inode->i_mapping->a_ops = &ntfs_aops;
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &ntfs_dir_inode_operations;;
 		inode->i_fop = &ntfs_dir_operations;
-//		inode->i_mapping->a_ops = &minix_aops;
+		inode->i_mapping->a_ops = &ntfs_aops;
 	} else if (S_ISLNK(inode->i_mode)) {
 //		inode->i_op = &minix_symlink_inode_operations;
 //		inode_nohighmem(inode);
