@@ -331,18 +331,18 @@ int ntfs_inode_real_close(ntfs_inode *ni)
 
 	/* If we have dirty metadata, write it out. */
 	if (NInoDirty(ni) || NInoAttrListDirty(ni)) {
-		if (ntfs_inode_sync(ni)) {
-			if (errno != EIO)
-				errno = EBUSY;
+		if ((ret = ntfs_inode_sync(ni))) {
+			if (ret != EIO)
+				ret = -EBUSY;
 			goto err;
 		}
 	}
 	/* Is this a base inode with mapped extent inodes? */
 	if (ni->nr_extents > 0) {
 		while (ni->nr_extents > 0) {
-			if (ntfs_inode_real_close(ni->extent_nis[0])) {
-				if (errno != EIO)
-					errno = EBUSY;
+			if ((ret = ntfs_inode_real_close(ni->extent_nis[0]))) {
+				if (ret != -EIO)
+					ret = -EBUSY;
 				goto err;
 			}
 		}
@@ -811,7 +811,7 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx) {
-		err = errno;
+		err = -ENOMEM;
 		goto err_out;
 	}
 	/* Collect the reparse tag, if any */
@@ -956,6 +956,7 @@ static int ntfs_inode_sync_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 {
 	int ret = 0;
 	int err = 0;
+
 	if (!ni) {
 		ntfs_log_error("Failed to sync NULL inode\n");
 		return -EINVAL;

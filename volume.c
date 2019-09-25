@@ -1359,8 +1359,8 @@ int ntfs_umount(ntfs_volume *vol, const BOOL force __attribute__((unused)))
 	int ret;
 
 	if (!vol) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 //	dev = vol->dev;
 	ret = __ntfs_volume_release(vol);

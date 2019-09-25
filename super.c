@@ -303,11 +303,11 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 				data_len))) {
 //			err = errno;
 			ntfs_log_error("Failed to add DATA attribute.\n");
-			free(data);
+			kfree(data);
 			goto err_out;
 		}
 		rollback_data = 1;
-		free(data);
+		kfree(data);
 	}
 	/* Create FILE_NAME attribute. */
 	fn_len = sizeof(FILE_NAME_ATTR) + name_len * sizeof(ntfschar);
@@ -373,8 +373,8 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 	}
 	ntfs_inode_mark_dirty(ni);
 	/* Done! */
-	free(fn);
-	free(si);
+	kfree(fn);
+	kfree(si);
 	ntfs_log_trace("Done.\n");
 	return ni;
 err_out:
@@ -399,8 +399,8 @@ err_out:
 	if (ntfs_mft_record_free(ni->vol, ni))
 		ntfs_log_error("Failed to free MFT record.  "
 				"Leaving inconsistent metadata. Run chkdsk.\n");
-	free(fn);
-	free(si);
+	kfree(fn);
+	kfree(si);
 //	errno = err;
 	return ERR_PTR(err);
 }
@@ -559,8 +559,8 @@ close:
 			;
 //			err = errno;
 out:
-	free(ascii);
-	free(unicode);
+	kfree(ascii);
+	kfree(unicode);
 	return result ? : ERR_PTR(err);
 }
 
