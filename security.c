@@ -1974,7 +1974,7 @@ int ntfs_sd_add_everyone(ntfs_inode *ni)
 		sizeof(ACL) + sizeof(ACCESS_ALLOWED_ACE); 
 	sd = (SECURITY_DESCRIPTOR_RELATIVE*)ntfs_calloc(sd_len);
 	if (!sd)
-		return -1;
+		return -ENOMEM;
 	
 	sd->revision = SECURITY_DESCRIPTOR_REVISION;
 	sd->control = SE_DACL_PRESENT | SE_SELF_RELATIVE;

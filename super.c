@@ -120,11 +120,302 @@ static const struct super_operations ntfs_sops = {
 	.show_options	= ntfs_show_options,
 };
 
+static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le32 securid,
+		const ntfschar *name, u8 name_len, mode_t type, dev_t dev,
+		const ntfschar *target, int target_len)
+{
+	ntfs_inode *ni;
+	int rollback_data = 0, rollback_sd = 0;
+	FILE_NAME_ATTR *fn = NULL;
+	STANDARD_INFORMATION *si = NULL;
+	int err, fn_len, si_len;
+
+	ntfs_log_trace("Entering.\n");
+	
+	/* Sanity checks. */
+	if (!dir_ni || !name || !name_len) {
+		ntfs_log_error("Invalid arguments.\n");
+//		errno = EINVAL;
+		return ERR_PTR(-EINVAL);
+	}
+	
+	if (dir_ni->flags & FILE_ATTR_REPARSE_POINT) {
+//		errno = EOPNOTSUPP;
+		return ERR_PTR(-EOPNOTSUPP);
+	}
+	
+	ni = ntfs_mft_record_alloc(dir_ni->vol, NULL);
+	if (IS_ERR(ni))
+		return ERR_PTR(-ENOMEM);
+#if CACHE_NIDATA_SIZE
+	ntfs_inode_invalidate(dir_ni->vol, ni->mft_no);
+#endif
+	/*
+	 * Create STANDARD_INFORMATION attribute.
+	 * JPA Depending on available inherited security descriptor,
+	 * Write STANDARD_INFORMATION v1.2 (no inheritance) or v3
+	 */
+	if (securid)
+		si_len = sizeof(STANDARD_INFORMATION);
+	else
+		si_len = offsetof(STANDARD_INFORMATION, v1_end);
+	si = ntfs_calloc(si_len);
+	if (!si) {
+		err = -ENOMEM;;
+		goto err_out;
+	}
+	si->creation_time = ni->creation_time;
+	si->last_data_change_time = ni->last_data_change_time;
+	si->last_mft_change_time = ni->last_mft_change_time;
+	si->last_access_time = ni->last_access_time;
+	if (securid) {
+		set_nino_flag(ni, v3_Extensions);
+		ni->owner_id = si->owner_id = const_cpu_to_le32(0);
+		ni->security_id = si->security_id = securid;
+		ni->quota_charged = si->quota_charged = const_cpu_to_le64(0);
+		ni->usn = si->usn = const_cpu_to_le64(0);
+	} else
+		clear_nino_flag(ni, v3_Extensions);
+	if (!S_ISREG(type) && !S_ISDIR(type)) {
+		si->file_attributes = FILE_ATTR_SYSTEM;
+		ni->flags = FILE_ATTR_SYSTEM;
+	}
+	ni->flags |= FILE_ATTR_ARCHIVE;
+	if (NVolHideDotFiles(dir_ni->vol)
+	    && (name_len > 1)
+	    && (name[0] == const_cpu_to_le16('.'))
+	    && (name[1] != const_cpu_to_le16('.')))
+		ni->flags |= FILE_ATTR_HIDDEN;
+		/*
+		 * Set compression flag according to parent directory
+		 * unless NTFS version < 3.0 or cluster size > 4K
+		 * or compression has been disabled
+		 */
+	if ((dir_ni->flags & FILE_ATTR_COMPRESSED)
+	   && (dir_ni->vol->major_ver >= 3)
+	   && NVolCompression(dir_ni->vol)
+	   && (dir_ni->vol->cluster_size <= MAX_COMPRESSION_CLUSTER_SIZE)
+	   && (S_ISREG(type) || S_ISDIR(type)))
+		ni->flags |= FILE_ATTR_COMPRESSED;
+	/* Add STANDARD_INFORMATION to inode. */
+	if ((err = ntfs_attr_add(ni, AT_STANDARD_INFORMATION, AT_UNNAMED, 0,
+			(u8*)si, si_len))) {
+//		err = errno;
+		ntfs_log_error("Failed to add STANDARD_INFORMATION "
+				"attribute.\n");
+		goto err_out;
+	}
+
+	if (!securid) {
+		if ((err = ntfs_sd_add_everyone(ni))) {
+//			err = errno;
+			goto err_out;
+		}
+	}
+	rollback_sd = 1;
+
+	if (S_ISDIR(type)) {
+		INDEX_ROOT *ir = NULL;
+		INDEX_ENTRY *ie;
+		int ir_len, index_len;
+
+		/* Create INDEX_ROOT attribute. */
+		index_len = sizeof(INDEX_HEADER) + sizeof(INDEX_ENTRY_HEADER);
+		ir_len = offsetof(INDEX_ROOT, index) + index_len;
+		ir = ntfs_calloc(ir_len);
+		if (!ir) {
+			err = -ENOMEM;
+			goto err_out;
+		}
+		ir->type = AT_FILE_NAME;
+		ir->collation_rule = COLLATION_FILE_NAME;
+		ir->index_block_size = cpu_to_le32(ni->vol->indx_record_size);
+		if (ni->vol->cluster_size <= ni->vol->indx_record_size)
+			ir->clusters_per_index_block =
+					ni->vol->indx_record_size >>
+					ni->vol->cluster_size_bits;
+		else
+			ir->clusters_per_index_block = 
+					ni->vol->indx_record_size >>
+					NTFS_BLOCK_SIZE_BITS;
+		ir->index.entries_offset = const_cpu_to_le32(sizeof(INDEX_HEADER));
+		ir->index.index_length = cpu_to_le32(index_len);
+		ir->index.allocated_size = cpu_to_le32(index_len);
+		ie = (INDEX_ENTRY*)((u8*)ir + sizeof(INDEX_ROOT));
+		ie->length = const_cpu_to_le16(sizeof(INDEX_ENTRY_HEADER));
+		ie->key_length = const_cpu_to_le16(0);
+		ie->ie_flags = INDEX_ENTRY_END;
+		/* Add INDEX_ROOT attribute to inode. */
+		if ((err = ntfs_attr_add(ni, AT_INDEX_ROOT, NTFS_INDEX_I30, 4,
+				(u8*)ir, ir_len))) {
+//			err = errno;
+			free(ir);
+			ntfs_log_error("Failed to add INDEX_ROOT attribute.\n");
+			goto err_out;
+		}
+		free(ir);
+	} else {
+		INTX_FILE *data;
+		int data_len;
+
+		switch (type) {
+			case S_IFBLK:
+			case S_IFCHR:
+				data_len = offsetof(INTX_FILE, device_end);
+				data = ntfs_malloc(data_len);
+				if (!data) {
+					err = -ENOMEM;
+					goto err_out;
+				}
+				data->major = cpu_to_le64(major(dev));
+				data->minor = cpu_to_le64(minor(dev));
+				if (type == S_IFBLK)
+					data->magic = INTX_BLOCK_DEVICE;
+				if (type == S_IFCHR)
+					data->magic = INTX_CHARACTER_DEVICE;
+				break;
+			case S_IFLNK:
+				data_len = sizeof(INTX_FILE_TYPES) +
+						target_len * sizeof(ntfschar);
+				data = ntfs_malloc(data_len);
+				if (!data) {
+					err = -ENOMEM;
+					goto err_out;
+				}
+				data->magic = INTX_SYMBOLIC_LINK;
+				memcpy(data->target, target,
+						target_len * sizeof(ntfschar));
+				break;
+			case S_IFSOCK:
+				data = NULL;
+				data_len = 1;
+				break;
+			default: /* FIFO or regular file. */
+				data = NULL;
+				data_len = 0;
+				break;
+		}
+		/* Add DATA attribute to inode. */
+		if ((err = ntfs_attr_add(ni, AT_DATA, AT_UNNAMED, 0, (u8*)data,
+				data_len))) {
+//			err = errno;
+			ntfs_log_error("Failed to add DATA attribute.\n");
+			free(data);
+			goto err_out;
+		}
+		rollback_data = 1;
+		free(data);
+	}
+	/* Create FILE_NAME attribute. */
+	fn_len = sizeof(FILE_NAME_ATTR) + name_len * sizeof(ntfschar);
+	fn = ntfs_calloc(fn_len);
+	if (!fn) {
+		err = -ENOMEM;
+		goto err_out;
+	}
+	fn->parent_directory = MK_LE_MREF(dir_ni->mft_no,
+			le16_to_cpu(dir_ni->mrec->sequence_number));
+	fn->file_name_length = name_len;
+	fn->file_name_type = FILE_NAME_POSIX;
+	if (S_ISDIR(type))
+		fn->file_attributes = FILE_ATTR_I30_INDEX_PRESENT;
+	if (!S_ISREG(type) && !S_ISDIR(type))
+		fn->file_attributes = FILE_ATTR_SYSTEM;
+	else
+		fn->file_attributes |= ni->flags & FILE_ATTR_COMPRESSED;
+	fn->file_attributes |= FILE_ATTR_ARCHIVE;
+	fn->file_attributes |= ni->flags & FILE_ATTR_HIDDEN;
+	fn->creation_time = ni->creation_time;
+	fn->last_data_change_time = ni->last_data_change_time;
+	fn->last_mft_change_time = ni->last_mft_change_time;
+	fn->last_access_time = ni->last_access_time;
+	if (ni->mrec->flags & MFT_RECORD_IS_DIRECTORY)
+		fn->data_size = fn->allocated_size = const_cpu_to_sle64(0);
+	else {
+		fn->data_size = cpu_to_sle64(ni->data_size);
+		fn->allocated_size = cpu_to_sle64(ni->allocated_size);
+	}
+	memcpy(fn->file_name, name, name_len * sizeof(ntfschar));
+	/* Add FILE_NAME attribute to inode. */
+	if ((err = ntfs_attr_add(ni, AT_FILE_NAME, AT_UNNAMED, 0, (u8*)fn, fn_len))) {
+//		err = errno;
+		ntfs_log_error("Failed to add FILE_NAME attribute.\n");
+		goto err_out;
+	}
+	/* Add FILE_NAME attribute to index. */
+	if ((err = ntfs_index_add_filename(dir_ni, fn, MK_MREF(ni->mft_no,
+			le16_to_cpu(ni->mrec->sequence_number))))) {
+//		err = errno;
+		ntfs_log_perror("Failed to add entry to the index");
+		goto err_out;
+	}
+	/* Set hard links count and directory flag. */
+	ni->mrec->link_count = const_cpu_to_le16(1);
+	if (S_ISDIR(type))
+		ni->mrec->flags |= MFT_RECORD_IS_DIRECTORY;
+	{
+		struct inode *inode = EXNTFS_I(ni);
+		inode_init_always(EXNTFS_V(dir_ni)->i_sb, inode);
+		inode->i_size = sle64_to_cpu(ni->data_size);
+		inode->i_atime = inode->i_mtime = inode->i_ctime = 
+		timespec_to_timespec64(ntfs2timespec(ni->creation_time));
+		set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
+		inode_sb_list_add(inode);
+		d_instantiate(dentry, inode);
+	}
+	ntfs_inode_mark_dirty(ni);
+	/* Done! */
+	free(fn);
+	free(si);
+	ntfs_log_trace("Done.\n");
+	return ni;
+err_out:
+	ntfs_log_trace("Failed.\n");
+
+	if (rollback_sd)
+		ntfs_attr_remove(ni, AT_SECURITY_DESCRIPTOR, AT_UNNAMED, 0);
+	
+	if (rollback_data)
+		ntfs_attr_remove(ni, AT_DATA, AT_UNNAMED, 0);
+	/*
+	 * Free extent MFT records (should not exist any with current
+	 * ntfs_create implementation, but for any case if something will be
+	 * changed in the future).
+	 */
+	while (ni->nr_extents)
+		if (ntfs_mft_record_free(ni->vol, *(ni->extent_nis))) {
+//			err = errno;
+			ntfs_log_error("Failed to free extent MFT record.  "
+					"Leaving inconsistent metadata.\n");
+		}
+	if (ntfs_mft_record_free(ni->vol, ni))
+		ntfs_log_error("Failed to free MFT record.  "
+				"Leaving inconsistent metadata. Run chkdsk.\n");
+	free(fn);
+	free(si);
+//	errno = err;
+	return ERR_PTR(err);
+}
+
 static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 						bool excl)
 {
-	ntfs_log_debug("%s\n", __func__);
-	return -EOPNOTSUPP;
+	ntfs_log_debug("%s, name=%s\n", __func__, dentry->d_name.name);
+	int len;
+	int ret = 0;
+	ntfs_inode *ni;
+	ntfschar *unicode = NULL;
+	len = ntfs_mbstoucs(dentry->d_name.name, &unicode);
+	if (len < 0) {
+		ret = -EINVAL
+		goto out;
+	}
+	ni = __ntfs_create2(EXNTFS_I(dir), dentry, 0, len, mode, 0, NULL, 0);
+	if (IS_ERR(ni))
+		ret = PTR_ERR(ni);
+out:
+	kfree(unicode);
+	return ret;
 }
 
 
