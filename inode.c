@@ -83,6 +83,7 @@ ntfs_inode *ntfs_inode_base(ntfs_inode *ni)
  */
 void ntfs_inode_mark_dirty(ntfs_inode *ni)
 {
+	mark_inode_dirty(EXNTFS_V(ni));
 	NInoSetDirty(ni);
 	if (ni->nr_extents == -1)
 		NInoSetDirty(ni->base_ni);
@@ -1435,8 +1436,8 @@ int ntfs_inode_badclus_bad(u64 mft_no, ATTR_RECORD *attr)
 
 	if (!attr) {
 		ntfs_log_error("Invalid argument.\n");
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 	
 	if (mft_no != FILE_BadClus)
@@ -1447,7 +1448,7 @@ int ntfs_inode_badclus_bad(u64 mft_no, ATTR_RECORD *attr)
 
 	if ((ustr = ntfs_str2ucs("$Bad", &len)) == NULL) {
 		ntfs_log_perror("Couldn't convert '$Bad' to Unicode");
-		return -1;
+		return -ENOMEM;
 	}
 
 	if (ustr && ntfs_names_are_equal(ustr, len,
@@ -1480,8 +1481,8 @@ int ntfs_inode_get_times(ntfs_inode *ni, char *value, size_t size)
 	ret = 0;
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (ctx) {
-		if (ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
-				     0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		if ((ret = ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
+				     0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 			ntfs_log_perror("Failed to get standard info (inode %lld)",
 					(long long)ni->mft_no);
 		} else {
@@ -1511,7 +1512,7 @@ int ntfs_inode_get_times(ntfs_inode *ni, char *value, size_t size)
 			}
 		ntfs_attr_put_search_ctx(ctx);
 	}		
-	return (ret ? ret : -errno);
+	return ret;
 }
 
 /*
@@ -1546,9 +1547,9 @@ int ntfs_inode_set_times(ntfs_inode *ni, const char *value, size_t size,
 			/* update the standard information attribute */
 		ctx = ntfs_attr_get_search_ctx(ni, NULL);
 		if (ctx) {
-			if (ntfs_attr_lookup(AT_STANDARD_INFORMATION,
+			if ((ret = ntfs_attr_lookup(AT_STANDARD_INFORMATION,
 					AT_UNNAMED, 0, CASE_SENSITIVE,
-					0, NULL, 0, ctx)) {
+					0, NULL, 0, ctx))) {
 				ntfs_log_perror("Failed to get standard info (inode %lld)",
 						(long long)ni->mft_no);
 			} else {
@@ -1609,10 +1610,10 @@ int ntfs_inode_set_times(ntfs_inode *ni, const char *value, size_t size,
 			}
 			ntfs_attr_put_search_ctx(ctx);
 		}
-	} else
-		if (size < 8)
-			errno = ERANGE;
-		else
-			errno = EEXIST;
+	} else if (size < 8) {
+		ret = -ERANGE;
+	} else {
+		ret = -EEXIST;
+	}
 	return (ret);
 }
