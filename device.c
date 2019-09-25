@@ -308,7 +308,7 @@ s64 ntfs_pwrite2(struct ntfs_device *dev, const s64 pos, s64 count,
 	}
 	if (!count)
 		return 0;
-	if (IS_RDONLY(sb)) {
+	if (NDevReadOnly(dev)) {
 //		errno = EROFS;
 		ret = -EROFS;
 		goto out;
@@ -357,7 +357,7 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	}
 	if (!count)
 		return 0;
-	if (NDevReadOnly(dev)) {
+	if (IS_RDONLY(sb)) {
 		ret = -EROFS;
 		goto out;
 	}
