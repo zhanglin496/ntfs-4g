@@ -28,6 +28,7 @@
 #include "bootsect.h"
 #include "dir.h"
 #include "misc.h"
+#include "security.h"
 
 static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino);
 
@@ -267,8 +268,8 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 					err = -ENOMEM;
 					goto err_out;
 				}
-				data->major = cpu_to_le64(major(dev));
-				data->minor = cpu_to_le64(minor(dev));
+				data->major = cpu_to_le64(MAJOR(dev));
+				data->minor = cpu_to_le64(MINOR(dev));
 				if (type == S_IFBLK)
 					data->magic = INTX_BLOCK_DEVICE;
 				if (type == S_IFCHR)
@@ -354,7 +355,7 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 	if (S_ISDIR(type))
 		ni->mrec->flags |= MFT_RECORD_IS_DIRECTORY;
 	{
-		struct inode *inode = EXNTFS_I(ni);
+		struct inode *inode = EXNTFS_V(ni);
 		inode_init_always(EXNTFS_V(dir_ni)->i_sb, inode);
 		inode->i_size = sle64_to_cpu(ni->data_size);
 		inode->i_atime = inode->i_mtime = inode->i_ctime = 
@@ -407,10 +408,10 @@ static int __ntfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	ntfschar *unicode = NULL;
 	len = ntfs_mbstoucs(dentry->d_name.name, &unicode);
 	if (len < 0) {
-		ret = -EINVAL
+		ret = -EINVAL;
 		goto out;
 	}
-	ni = __ntfs_create2(EXNTFS_I(dir), dentry, 0, len, mode, 0, NULL, 0);
+	ni = __ntfs_create2(EXNTFS_I(dir), dentry, 0, unicode, len, mode, 0, NULL, 0);
 	if (IS_ERR(ni))
 		ret = PTR_ERR(ni);
 out:
