@@ -357,7 +357,7 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 	}
 	if (!count)
 		return 0;
-	if (IS_RDONLY(sb)) {
+	if (sb_rdonly(sb)) {
 		ret = -EROFS;
 		goto out;
 	}
