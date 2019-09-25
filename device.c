@@ -343,7 +343,7 @@ out:
 s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		const void *b)
 {
-	s64 br, written, total, ret;
+	s64 br, total, ret;
 	struct buffer_head *bh;
 	sector_t sector;
 	struct super_block *sb  = (void *)dev;
@@ -363,9 +363,7 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 
 	sector = pos / NTFS_BLOCK_SIZE;
 //	NDevSetDirty(dev);
-	for (total = 0; count; count -= br, total += written) {
-//		written = dops->pwrite(dev, (const char*)b + total, count,
-//				       pos + total);
+	for (total = 0; count; count -= br, total += br) {
 		bh = sb_bread(sb, sector);
 		if (!bh)
 			break;
