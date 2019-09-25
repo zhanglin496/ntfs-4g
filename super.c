@@ -40,8 +40,8 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 	if (!ni)
 		return NULL;
 
-	inode_set_iversion(&ni->vfs_inode, 1);
-	inode_init_once(&ni->vfs_inode);
+//	inode_set_iversion(&ni->vfs_inode, 1);
+//	inode_init_once(&ni->vfs_inode);
 	return &ni->vfs_inode;
 }
 

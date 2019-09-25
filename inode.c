@@ -101,10 +101,11 @@ static ntfs_inode *__ntfs_inode_allocate(ntfs_volume *vol)
 	ntfs_inode *ni;
 
 	ni = (ntfs_inode*)ntfs_calloc(sizeof(ntfs_inode));
-	if (ni)
+	if (ni) {
 		ni->vol = vol;
-	inode_set_iversion(&ni->vfs_inode, 1);
-	inode_init_once(&ni->vfs_inode);
+		inode_set_iversion(&ni->vfs_inode, 1);
+		inode_init_once(&ni->vfs_inode);
+	}
 	return ni;
 }
 
