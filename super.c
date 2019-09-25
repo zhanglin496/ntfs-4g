@@ -357,6 +357,7 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 	{
 		struct inode *inode = EXNTFS_V(ni);
 		inode_init_always(EXNTFS_V(dir_ni)->i_sb, inode);
+		inode->i_state = I_NEW;
 		inode->i_ino = MREF(ni->mft_no);
 		inode->i_size = sle64_to_cpu(ni->data_size);
 		inode->i_atime = inode->i_mtime = inode->i_ctime = 
