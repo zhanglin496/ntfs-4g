@@ -61,6 +61,7 @@
 #include "logging.h"
 #include "misc.h"
 #include "xattrs.h"
+#include "super.h"
 
 static int errno;
 
