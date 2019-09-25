@@ -933,7 +933,7 @@ static int ntfs_mft_bitmap_extend_initialized(ntfs_volume *vol)
 	}
 
 	if ((ret = ntfs_attr_lookup(mftbmp_na->type, mftbmp_na->name,
-			mftbmp_na->name_len, 0, 0, NULL, 0, ctx)) {
+			mftbmp_na->name_len, 0, 0, NULL, 0, ctx))) {
 		ntfs_log_error("Failed to find first attribute extent of "
 				"mft bitmap attribute.%s\n", es);
 put_err_out:

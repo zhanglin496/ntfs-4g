@@ -5828,7 +5828,7 @@ retry:
 		 */
 		if (!(err = ntfs_mapping_pairs_build(na->ni->vol, (u8*)a + le16_to_cpu(
 				a->mapping_pairs_offset), mp_size, na->rl,
-				stop_vcn, &stop_rl))_)
+				stop_vcn, &stop_rl)))
 			finished_build = TRUE;
 		if (stop_rl)
 			stop_vcn = stop_rl->vcn;
