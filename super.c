@@ -356,11 +356,14 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 	{
 		struct inode *inode = EXNTFS_I(ni);
 		inode_init_always(EXNTFS_V(dir_ni)->i_sb, inode);
+		inode->i_ino = MREF(ni->mft_no);
 		inode->i_size = sle64_to_cpu(ni->data_size);
 		inode->i_atime = inode->i_mtime = inode->i_ctime = 
 		timespec_to_timespec64(ntfs2timespec(ni->creation_time));
 		set_nlink(inode, le16_to_cpu(ni->mrec->link_count));
+		inode_init_owner(inode, EXNTFS_V(dir_ni), type);
 		inode_sb_list_add(inode);
+		insert_inode_hash(inode);
 		d_instantiate(dentry, inode);
 	}
 	ntfs_inode_mark_dirty(ni);

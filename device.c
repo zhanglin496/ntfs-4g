@@ -292,22 +292,25 @@ s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
  * appropriately to the return code of either seek, write, or set
  * to EINVAL in case of invalid arguments.
  */
-s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
+s64 ntfs_pwrite2(struct ntfs_device *dev, const s64 pos, s64 count,
 		const void *b)
 {
-	s64 written, total, ret = -1;
+	s64 written, total, ret;
 	struct ntfs_device_operations *dops;
+	struct super_block *sb  = (void *)dev;
 
 	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
 
 	if (!b || count < 0 || pos < 0) {
 //		errno = EINVAL;
+		ret = -EINVAL;
 		goto out;
 	}
 	if (!count)
 		return 0;
 	if (NDevReadOnly(dev)) {
 //		errno = EROFS;
+		ret = -EROFS;
 		goto out;
 	}
 	
@@ -315,8 +318,8 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 
 	NDevSetDirty(dev);
 	for (total = 0; count; count -= written, total += written) {
-		written = dops->pwrite(dev, (const char*)b + total, count,
-				       pos + total);
+//		written = dops->pwrite(dev, (const char*)b + total, count,
+//				       pos + total);
 		/* If everything ok, continue. */
 		if (written > 0)
 			continue;
@@ -333,7 +336,67 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		total--; /* on sync error, return partially written */
 	}
 	ret = total;
-out:	
+out:
+	return ret;
+}
+
+s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
+		const void *b)
+{
+	s64 br, written, total, ret;
+	struct buffer_head *bh;
+	sector_t sector;
+	struct super_block *sb  = (void *)dev;
+
+	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
+
+	if (!b || count < 0 || pos < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (!count)
+		return 0;
+	if (NDevReadOnly(dev)) {
+		ret = -EROFS;
+		goto out;
+	}
+
+	sector = pos / NTFS_BLOCK_SIZE;
+//	NDevSetDirty(dev);
+	for (total = 0; count; count -= br, total += written) {
+//		written = dops->pwrite(dev, (const char*)b + total, count,
+//				       pos + total);
+		bh = sb_bread(sb, sector);
+		if (!bh)
+			break;
+		br = bh->b_size;
+		sector += br / NTFS_BLOCK_SIZE;
+		if (br > count)
+			br = count;
+		memcpy(bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE),
+				b + total, br);
+		mark_buffer_dirty(bh);
+		brelse(bh);
+
+#if 0
+		/* If everything ok, continue. */
+		if (written > 0)
+			continue;
+		/*
+		 * If nothing written or error return number of bytes written.
+		 */
+		if (!written || total)
+			break;
+		/* Nothing written and error, return error status. */
+		total = written;
+		break;
+#endif
+	}
+//	if (NDevSync(dev) && total && dops->sync(dev)) {
+//		total--; /* on sync error, return partially written */
+//	}
+	ret = total;
+out:
 	return ret;
 }
 
