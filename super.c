@@ -551,8 +551,9 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 	ntfs_log_debug("ni=%p\n", ni);
 	if (!IS_ERR(ni))
 		return d_splice_alias(EXNTFS_V(ni), dentry);
-
-	return (void *)ni;
+	//non exist add 
+	return d_splice_alias(NULL, dentry);
+//	return (void *)ni;
 }
 
 static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
