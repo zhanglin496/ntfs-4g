@@ -61,7 +61,8 @@ static void ntfs_destroy_inode(struct inode *inode)
 static int ntfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	ntfs_log_debug("%s\n", __func__);
-	return 0;
+
+	return ntfs_inode_sync(EXNTFS_I(inode));
 }
 
 static void ntfs_evict_inode(struct inode *inode)
@@ -366,6 +367,7 @@ static ntfs_inode *__ntfs_create2(ntfs_inode *dir_ni, struct dentry *dentry, le3
 		inode_init_owner(inode, EXNTFS_V(dir_ni), type);
 		inode_sb_list_add(inode);
 		insert_inode_hash(inode);
+		mark_inode_dirty(inode);
 		d_instantiate(dentry, inode);
 		unlock_new_inode(inode);
 	}
