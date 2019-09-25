@@ -344,10 +344,9 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		const void *b)
 {
 	s64 br, total, ret;
-	struct buffer_head *bh;
 	sector_t sector;
+	struct buffer_head *bh;
 	struct super_block *sb  = (void *)dev;
-	return count;
 
 	ntfs_log_trace("pos %lld, count %lld\n",(long long)pos,(long long)count);
 
@@ -369,10 +368,10 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 			break;
 		br = bh->b_size;
 		sector += br / NTFS_BLOCK_SIZE;
+		if (!total)
+			br -= pos % NTFS_BLOCK_SIZE;
 		if (br > count)
 			br = count;
-		if (!total)
-			br -= pos % NTFS_BLOCK_SIZE ;
 		memcpy(bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE), b + total, br);
 		mark_buffer_dirty(bh);
 		brelse(bh);
