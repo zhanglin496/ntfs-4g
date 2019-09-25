@@ -37,6 +37,12 @@
 #include <errno.h>
 #endif
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,20,0)
+#include <linux/iversion.h>
+#endif
+
+
 #include "param.h"
 #include "compat.h"
 #include "types.h"
