@@ -380,7 +380,7 @@ int ntfs_inode_real_close(ntfs_inode *ni)
 				if (tmp_nis)
 					base_ni->extent_nis = tmp_nis;
 			} else if (tmp_nis) {
-				free(tmp_nis);
+				kfree(tmp_nis);
 				base_ni->extent_nis = (ntfs_inode**)NULL;
 			}
 			/* Allow for error checking. */
@@ -671,7 +671,7 @@ ntfs_inode *ntfs_extent_inode_open(ntfs_inode *base_ni, const leMFT_REF mref)
 		if (base_ni->nr_extents) {
 			memcpy(extent_nis, base_ni->extent_nis,
 					i - 4 * sizeof(ntfs_inode *));
-			free(base_ni->extent_nis);
+			kfree(base_ni->extent_nis);
 		}
 		base_ni->extent_nis = extent_nis;
 	}
@@ -1290,7 +1290,7 @@ rollback:
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
 err_out:
-	free(al);
+	kfree(al);
 //	errno = err;
 	return err;
 }
