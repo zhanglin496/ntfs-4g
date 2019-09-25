@@ -36,12 +36,11 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 {
 	ntfs_log_debug("%s\n", __func__);
 	ntfs_inode *ni;
-	ni = ntfs_inode_allocate(sb->s_fs_info);
+	ni = (ntfs_inode*)ntfs_calloc(sizeof(ntfs_inode))
 	if (!ni)
 		return NULL;
-
-//	inode_set_iversion(&ni->vfs_inode, 1);
-//	inode_init_once(&ni->vfs_inode);
+	inode_set_iversion(&ni->vfs_inode, 1);
+	inode_init_once(&ni->vfs_inode);
 	return &ni->vfs_inode;
 }
 

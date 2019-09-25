@@ -106,6 +106,7 @@ static ntfs_inode *__ntfs_inode_allocate(ntfs_volume *vol)
 		ni->vol = vol;
 		inode_set_iversion(&ni->vfs_inode, 1);
 		inode_init_once(&ni->vfs_inode);
+		inode_init_always(vol->sb, EXNTFS_V(ni));
 	}
 	return ni;
 }
