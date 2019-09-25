@@ -371,8 +371,9 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		sector += br / NTFS_BLOCK_SIZE;
 		if (br > count)
 			br = count;
-		memcpy(bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE),
-				b + total, br);
+		if (!total)
+			br -= pos;
+		memcpy(bh->b_data + (total ? 0 : pos), b + total, br);
 		mark_buffer_dirty(bh);
 		brelse(bh);
 
