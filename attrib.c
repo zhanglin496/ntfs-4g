@@ -2866,8 +2866,8 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 				if (rc < 0) {
 					return -ENOENT;
 				}
-			/* If the strings are not equal, continue search. */
-			continue;
+				/* If the strings are not equal, continue search. */
+				continue;
 			}
 		}
 		/*
