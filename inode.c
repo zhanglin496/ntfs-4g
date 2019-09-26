@@ -334,7 +334,7 @@ int ntfs_inode_real_close(ntfs_inode *ni)
 	/* If we have dirty metadata, write it out. */
 	if (NInoDirty(ni) || NInoAttrListDirty(ni)) {
 		if ((ret = ntfs_inode_sync(ni))) {
-			if (ret != EIO)
+			if (ret != -EIO)
 				ret = -EBUSY;
 			goto err;
 		}
