@@ -63,7 +63,7 @@
 #include "xattrs.h"
 #include "super.h"
 
-static int errno;
+//static int errno;
 
 ntfs_inode *ntfs_inode_base(ntfs_inode *ni)
 {
@@ -1103,8 +1103,8 @@ int ntfs_inode_close_in_dir(ntfs_inode *ni, ntfs_inode *dir_ni)
 
 	res = ntfs_inode_sync_in_dir(ni, dir_ni);
 	if (res) {
-		if (errno != EIO)
-			errno = EBUSY;
+		if (res != -EIO)
+			res = -EBUSY;
 	} else
 		res = ntfs_inode_close(ni);
 	return (res);
@@ -1543,7 +1543,6 @@ int ntfs_inode_set_times(ntfs_inode *ni, const char *value, size_t size,
 	int cnt;
 	int ret;
 
-	ret = -1;
 	if ((size >= 8) && !(flags & XATTR_CREATE)) {
 		times = (const u64*)value;
 		now = ntfs_current_time();
@@ -1604,14 +1603,16 @@ int ntfs_inode_set_times(ntfs_inode *ni, const char *value, size_t size,
 					fn->last_mft_change_time = now;
 					cnt++;
 				}
-				if (cnt)
+				if (cnt) {
 					ret = 0;
-				else {
+				} else {
 					ntfs_log_perror("Failed to get file names (inode %lld)",
 						(long long)ni->mft_no);
 				}
 			}
 			ntfs_attr_put_search_ctx(ctx);
+		}else {
+			ret = -ENOMEM;
 		}
 	} else if (size < 8) {
 		ret = -ERANGE;
