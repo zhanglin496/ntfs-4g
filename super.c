@@ -751,6 +751,7 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 		goto err_out;
 	}
 
+	ni->vol = vol;
 	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
 		goto err_out;
 	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
@@ -759,8 +760,10 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 	}
 	ni->mft_no = MREF(mref);
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (!ctx)
+	if (!ctx) {
+		err = -ENOMEM;
 		goto err_out;
+	}
 	/* Receive some basic information about inode. */
 	if ((err = ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
 				0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {

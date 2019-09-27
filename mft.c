@@ -243,7 +243,7 @@ int ntfs_mft_record_check(const ntfs_volume *vol, const MFT_REF mref,
 	ret = 0;
 err_out:
 	if (ret)
-		errno = EIO;
+		ret = -EIO;
 	return ret;
 }
 
@@ -282,30 +282,32 @@ int ntfs_file_record_read(const ntfs_volume *vol, const MFT_REF mref,
 		MFT_RECORD **mrec, ATTR_RECORD **attr)
 {
 	MFT_RECORD *m;
+	int err;
 
 	if (!vol || !mrec) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s: mrec=%p", __FUNCTION__, mrec);
-		return -1;
+		return -EINVAL;
 	}
 	
 	m = *mrec;
 	if (!m) {
 		m = ntfs_malloc(vol->mft_record_size);
 		if (!m)
-			return -1;
+			return -ENOMEM;
 	}
-	if (ntfs_mft_record_read(vol, mref, m))
+	if ((err = ntfs_mft_record_read(vol, mref, m)))
 		goto err_out;
 
-	if (ntfs_mft_record_check(vol, mref, m))
+	if ((err = ntfs_mft_record_check(vol, mref, m)))
 		goto err_out;
 	
 	if (MSEQNO(mref) && MSEQNO(mref) != le16_to_cpu(m->sequence_number)) {
 		ntfs_log_error("Record %llu has wrong SeqNo (%d <> %d)\n",
 			       (unsigned long long)MREF(mref), MSEQNO(mref),
 			       le16_to_cpu(m->sequence_number));
-		errno = EIO;
+//		errno = EIO;
+		err = -EIO;
 		goto err_out;
 	}
 	*mrec = m;
@@ -315,7 +317,7 @@ int ntfs_file_record_read(const ntfs_volume *vol, const MFT_REF mref,
 err_out:
 	if (m != *mrec)
 		free(m);
-	return -1;
+	return err;
 }
 
 /**
