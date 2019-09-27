@@ -163,8 +163,8 @@ static int ntfs_inode_free(ntfs_inode **ni)
 
 static void ntfs_error_set(int *err)
 {
-	if (!*err)
-		*err = errno;
+//	if (!*err)
+//		*err = errno;
 }
 
 /**
@@ -1392,7 +1392,8 @@ static int ntfs_mntent_check(const char *file, unsigned long *mnt_flags)
 		return -1;
 	real_fsname = ntfs_malloc(PATH_MAX + 1);
 	if (!real_fsname) {
-		err = errno;
+		err = -ENOMEM;
+//		err = errno;
 		goto exit;
 	}
 	if (!ntfs_realpath_canonicalize(file, real_file)) {
@@ -1542,8 +1543,8 @@ int ntfs_version_is_supported(ntfs_volume *vol)
 	u8 major, minor;
 
 	if (!vol) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	major = vol->major_ver;
@@ -1558,8 +1559,8 @@ int ntfs_version_is_supported(ntfs_volume *vol)
 	if (NTFS_V3_0(major, minor) || NTFS_V3_1(major, minor))
 		return 0;
 
-	errno = EOPNOTSUPP;
-	return -1;
+//	errno = EOPNOTSUPP;
+	return -EOPNOTSUPP;
 }
 
 /**
@@ -1803,7 +1804,7 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 	if (NVolReadOnly(vol)) {
 		ntfs_log_error("Refusing to change label on read-only mounted "
 			"volume.\n");
-		errno = EROFS;
+//		errno = EROFS;
 		return -EROFS;
 	}
 
@@ -1812,7 +1813,7 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 		ntfs_log_error("New label is too long. Maximum %u characters "
 				"allowed.\n",
 				(unsigned)(0x100 / sizeof(ntfschar)));
-		errno = ERANGE;
+//		errno = ERANGE;
 		return -ERANGE;
 	}
 
@@ -1826,10 +1827,10 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 		}
 
 		/* The volume name attribute does not exist.  Need to add it. */
-		if (ntfs_attr_add(vol->vol_ni, AT_VOLUME_NAME, AT_UNNAMED, 0,
-			(const u8*) label, label_len))
+		if ((err = ntfs_attr_add(vol->vol_ni, AT_VOLUME_NAME, AT_UNNAMED, 0,
+			(const u8*) label, label_len)))
 		{
-			err = errno;
+//			err = errno;
 			ntfs_log_perror("Encountered error while adding "
 				"$VOLUME_NAME attribute");
 			goto err_out;
