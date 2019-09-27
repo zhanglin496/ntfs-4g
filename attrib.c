@@ -4134,7 +4134,7 @@ int ntfs_attr_record_rm(ntfs_attr_search_ctx *ctx)
 		if (ntfs_mft_record_free(ni->vol, ni)) {
 			// FIXME: We need rollback here.
 			ntfs_log_trace("Couldn't free MFT record.\n");
-			errno = EIO;
+//			errno = EIO;
 			return -EIO;
 		}
 		/* Remove done if we freed base inode. */

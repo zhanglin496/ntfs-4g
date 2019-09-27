@@ -1935,13 +1935,13 @@ int ntfs_mft_record_free(ntfs_volume *vol, ntfs_inode *ni)
 
 	/* Set the inode dirty and write it out. */
 	ntfs_inode_mark_dirty(ni);
-	if (ntfs_inode_sync(ni)) {
+	if ((err = ntfs_inode_sync(ni))) {
 //		err = errno;
 		goto sync_rollback;
 	}
 
 	/* Clear the bit in the $MFT/$BITMAP corresponding to this record. */
-	if (ntfs_bitmap_clear_bit(vol->mftbmp_na, mft_no)) {
+	if ((err = ntfs_bitmap_clear_bit(vol->mftbmp_na, mft_no))) {
 //		err = errno;
 		// FIXME: If ntfs_bitmap_clear_run() guarantees rollback on
 		//	  error, this could be changed to goto sync_rollback;
@@ -1950,9 +1950,9 @@ int ntfs_mft_record_free(ntfs_volume *vol, ntfs_inode *ni)
 
 	/* Throw away the now freed inode. */
 #if CACHE_NIDATA_SIZE
-	if (!ntfs_inode_real_close(ni)) {
+	if (!(err = ntfs_inode_real_close(ni))) {
 #else
-	if (!ntfs_inode_close(ni)) {
+	if (!(err = ntfs_inode_close(ni))) {
 #endif
 		vol->free_mft_records++; 
 		return 0;
@@ -1969,7 +1969,7 @@ sync_rollback:
 	ni->mrec->sequence_number = old_seq_no;
 	ntfs_inode_mark_dirty(ni);
 //	errno = err;
-	return -1;
+	return err;
 }
 
 /**

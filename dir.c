@@ -585,7 +585,7 @@ u64 ntfs_inode_lookup_by_mbsname(ntfs_inode *dir_ni, const char *name)
 			if (cached) {
 				inum = cached->inum;
 				if (inum == (u64)-1)
-					errno = ENOENT;
+//					errno = ENOENT;
 			} else {
 				/* Generate unicode name. */
 				uname_len = ntfs_mbstoucs(name, &uname);
@@ -779,7 +779,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 			if (len < 0) {
 				ntfs_log_perror("Could not convert filename to Unicode:"
 					" '%s'", p);
-				err = errno;
+//				err = errno;
 				goto close;
 			} else if (len > NTFS_MAX_NAME_LEN) {
 				err = -ENAMETOOLONG;
@@ -816,8 +816,8 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		if ((s64)inum < 0)
 			goto close;
 		if (ni != parent)
-			if (ntfs_inode_close(ni)) {
-				err = errno;
+			if ((err = ntfs_inode_close(ni))) {
+//				err = errno;
 				goto out;
 			}
 
@@ -1855,7 +1855,7 @@ static int ntfs_check_unlinkable_dir(ntfs_inode *ni, FILE_NAME_ATTR *fn)
 	int ret;
 	
 	ret = ntfs_check_empty_dir(ni);
-	if (!ret || errno != ENOTEMPTY)
+	if (!ret || ret != -ENOTEMPTY)
 		return ret;
 	/* 
 	 * Directory is non-empty, so we can unlink only if there is more than
@@ -1863,7 +1863,7 @@ static int ntfs_check_unlinkable_dir(ntfs_inode *ni, FILE_NAME_ATTR *fn)
 	 */
 	if ((link_count == 1) || 
 	    (link_count == 2 && fn->file_name_type == FILE_NAME_DOS)) {
-		errno = ENOTEMPTY;
+		ret = -ENOTEMPTY;
 		ntfs_log_debug("Non-empty directory without hard links\n");
 		goto no_hardlink;
 	}
@@ -1911,7 +1911,8 @@ int ntfs_delete(ntfs_volume *vol, const char *pathname,
 	
 	if (!ni || !dir_ni || !name || !name_len) {
 		ntfs_log_error("Invalid arguments.\n");
-		errno = EINVAL;
+//		errno = EINVAL;
+		err = -EINVAL;
 		goto err_out;
 	}
 	if (ni->nr_extents == -1)
@@ -1925,8 +1926,10 @@ int ntfs_delete(ntfs_volume *vol, const char *pathname,
 	 * only then remove WIN32 name.
 	 */
 	actx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (!actx)
+	if (!actx) {
+		err = -ENOMEM;
 		goto err_out;
+	}
 search:
 	while (!(err = ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0,
 					CASE_SENSITIVE, 0, NULL, 0, actx))) {
@@ -1990,7 +1993,7 @@ search:
 		 * If case sensitive search failed, then try once again
 		 * ignoring case.
 		 */
-		if (errno == ENOENT && case_sensitive_match) {
+		if (err == -ENOENT && case_sensitive_match) {
 			case_sensitive_match = FALSE;
 			ntfs_attr_reinit_search_ctx(actx);
 			goto search;
@@ -1998,7 +2001,7 @@ search:
 		goto err_out;
 	}
 	
-	if (ntfs_check_unlinkable_dir(ni, fn) < 0)
+	if ((err = ntfs_check_unlinkable_dir(ni, fn)) < 0)
 		goto err_out;
 		
 	if (ntfs_index_remove(dir_ni, ni, fn, le32_to_cpu(actx->attr->value_length)))
@@ -2013,7 +2016,7 @@ search:
 			/* make sure to not loop to another search */
 		looking_for_dos_name = FALSE;
 	} else {
-		if (ntfs_attr_record_rm(actx))
+		if ((err = ntfs_attr_record_rm(actx)))
 			goto err_out;
 	}
 	
@@ -2121,8 +2124,8 @@ search:
 	for (i=ni->nr_extents-1; i>=0; i--) {
 		ni->extent_nis[i]->base_ni = (ntfs_inode*)NULL;
 		ni->extent_nis[i]->nr_extents = 0;
-		if (ntfs_mft_record_free(ni->vol, ni->extent_nis[i])) {
-			err = errno;
+		if ((err = ntfs_mft_record_free(ni->vol, ni->extent_nis[i]))) {
+//			err = errno;
 			ntfs_log_error("Failed to free extent MFT record.  "
 					"Leaving inconsistent metadata.\n");
 		}
@@ -2132,15 +2135,15 @@ search:
 	ni->extent_nis = (ntfs_inode**)NULL;
 #else
 	while (ni->nr_extents)
-		if (ntfs_mft_record_free(ni->vol, *(ni->extent_nis))) {
-			err = errno;
+		if ((err = ntfs_mft_record_free(ni->vol, *(ni->extent_nis)))) {
+//			err = errno;
 			ntfs_log_error("Failed to free extent MFT record.  "
 					"Leaving inconsistent metadata.\n");
 		}
 #endif
 	debug_double_inode(ni->mft_no,0);
-	if (ntfs_mft_record_free(ni->vol, ni)) {
-		err = errno;
+	if ((err = ntfs_mft_record_free(ni->vol, ni))) {
+//		err = errno;
 		ntfs_log_error("Failed to free base MFT record.  "
 				"Leaving inconsistent metadata.\n");
 	}
@@ -2155,14 +2158,14 @@ out:
 	if (ntfs_inode_close(ni) && !err)
 		err = errno;
 	if (err) {
-		errno = err;
+//		errno = err;
 		ntfs_log_debug("Could not delete file:\n");
-		return -1;
+//		return err;
 	}
 	ntfs_log_trace("Done.\n");
-	return 0;
+	return err;
 err_out:
-	err = errno;
+//	err = errno;
 	goto out;
 }
 
