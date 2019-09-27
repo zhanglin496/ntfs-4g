@@ -1472,7 +1472,7 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 	INDEX_HEADER *ih;
 	int allocated_size, new_size;
 	int err;
-	int ret = STATUS_ERROR;
+//	int ret = STATUS_ERROR;
 	
 #ifdef DEBUG
 /* removed by JPA to make function usable for security indexes
@@ -1510,10 +1510,10 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 			       allocated_size, new_size);
 		
 		if (icx->is_in_root) {
-			if (ntfs_ir_make_space(icx, new_size) == STATUS_ERROR)
+			if ((err = ntfs_ir_make_space(icx, new_size)) == STATUS_ERROR)
 				goto err_out;
 		} else {
-			if (ntfs_ib_split(icx, icx->ib) == STATUS_ERROR)
+			if ((err = ntfs_ib_split(icx, icx->ib)) == STATUS_ERROR)
 				goto err_out;
 		}
 		
@@ -1523,11 +1523,11 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 	
 	ntfs_ie_insert(ih, ie, icx->entry);
 	ntfs_index_entry_mark_dirty(icx);
-	
-	ret = STATUS_OK;
+	err = 0;
+//	ret = STATUS_OK;
 err_out:
 	ntfs_log_trace("%s\n", ret ? "Failed" : "Done");
-	return ret;
+	return err;
 }
 
 /**

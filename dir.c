@@ -2213,7 +2213,7 @@ static int ntfs_link_i(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
 	fn_len = sizeof(FILE_NAME_ATTR) + name_len * sizeof(ntfschar);
 	fn = ntfs_calloc(fn_len);
 	if (!fn) {
-		err = errno;
+		err = -ENOMEM;
 		goto err_out;
 	}
 	fn->parent_directory = MK_LE_MREF(dir_ni->mft_no,
@@ -2234,16 +2234,16 @@ static int ntfs_link_i(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
 	fn->last_access_time = ni->last_access_time;
 	memcpy(fn->file_name, name, name_len * sizeof(ntfschar));
 	/* Add FILE_NAME attribute to index. */
-	if (ntfs_index_add_filename(dir_ni, fn, MK_MREF(ni->mft_no,
-			le16_to_cpu(ni->mrec->sequence_number)))) {
-		err = errno;
+	if ((err = ntfs_index_add_filename(dir_ni, fn, MK_MREF(ni->mft_no,
+			le16_to_cpu(ni->mrec->sequence_number))))) {
+//		err = errno;
 		ntfs_log_perror("Failed to add filename to the index");
 		goto err_out;
 	}
 	/* Add FILE_NAME attribute to inode. */
-	if (ntfs_attr_add(ni, AT_FILE_NAME, AT_UNNAMED, 0, (u8*)fn, fn_len)) {
+	if ((err = ntfs_attr_add(ni, AT_FILE_NAME, AT_UNNAMED, 0, (u8*)fn, fn_len))) {
 		ntfs_log_error("Failed to add FILE_NAME attribute.\n");
-		err = errno;
+//		err = errno;
 		/* Try to remove just added attribute from index. */
 		if (ntfs_index_remove(dir_ni, ni, fn, fn_len))
 			goto rollback_failed;
@@ -2254,15 +2254,15 @@ static int ntfs_link_i(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
 			ni->mrec->link_count) + 1);
 	/* Done! */
 	ntfs_inode_mark_dirty(ni);
-	free(fn);
+	kfree(fn);
 	ntfs_log_trace("Done.\n");
 	return 0;
 rollback_failed:
 	ntfs_log_error("Rollback failed. Leaving inconsistent metadata.\n");
 err_out:
-	free(fn);
-	errno = err;
-	return -1;
+	kfree(fn);
+//	errno = err;
+	return err;
 }
 
 int ntfs_link(ntfs_inode *ni, ntfs_inode *dir_ni, const ntfschar *name,
@@ -2334,7 +2334,7 @@ static int get_dos_name(ntfs_inode *ni, u64 dnum, ntfschar *dosname)
 		/* find the name in the attributes */
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx)
-		return -1;
+		return -ENOMEM;
 
 	while (!ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0, CASE_SENSITIVE,
 			0, NULL, 0, ctx)) {
@@ -2359,8 +2359,8 @@ static int get_dos_name(ntfs_inode *ni, u64 dnum, ntfschar *dosname)
 	}
 	ntfs_attr_put_search_ctx(ctx);
 	if ((outsize > 0) && (namecount > 1)) {
-		outsize = -1;
-		errno = EMLINK; /* this error implies there is a dos name */
+		outsize = -EMLINK;
+//		errno = EMLINK; /* this error implies there is a dos name */
 	}
 	return (outsize);
 }
@@ -2386,7 +2386,7 @@ static int get_long_name(ntfs_inode *ni, u64 dnum, ntfschar *longname)
 		/* find the name in the attributes */
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
 	if (!ctx)
-		return -1;
+		return -ENOMEM;
 
 		/* first search for WIN32 or DOS+WIN32 names */
 	while (!ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0, CASE_SENSITIVE,
@@ -2409,8 +2409,8 @@ static int get_long_name(ntfs_inode *ni, u64 dnum, ntfschar *longname)
 	}
 	if (namecount > 1) {
 		ntfs_attr_put_search_ctx(ctx);
-		errno = EMLINK;
-		return -1;
+//		errno = EMLINK;
+		return -EMLINK;
 	}
 		/* if not found search for POSIX names */
 	if (!outsize) {
@@ -2463,7 +2463,7 @@ int ntfs_get_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 		outsize = ntfs_ucstombs(dosname, doslen, &outname, 0);
 		if (outsize < 0) {
 			ntfs_log_error("Cannot represent dosname in current locale.\n");
-			outsize = -errno;
+//			outsize = -errno;
 		} else {
 			if (value && (outsize <= (int)size))
 				memcpy(value, outname, outsize);
@@ -2474,8 +2474,10 @@ int ntfs_get_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 		}
 	} else {
 		if (doslen == 0)
-			errno = ENODATA;
-		outsize = -errno;
+//			errno = ENODATA;
+			doslen = -ENODATA;
+//		outsize = -errno;
+		outsize =doslen;
 	}
 	return (outsize);
 }
@@ -2527,7 +2529,7 @@ static int set_namespace(ntfs_inode *ni, ntfs_inode *dir_ni,
 					ntfs_inode_mark_dirty(ni);
 					ntfs_index_entry_mark_dirty(icx);
 				}
-			ntfs_index_ctx_put(icx);
+				ntfs_index_ctx_put(icx);
 			}
 		}
 		ntfs_attr_put_search_ctx(actx);
@@ -2706,8 +2708,8 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 					     FALSE)) {
 			if (oldlen > 0) {
 				if (flags & XATTR_CREATE) {
-					res = -1;
-					errno = EEXIST;
+					res = -EEXIST;
+//					errno = EEXIST;
 				} else
 					if ((shortlen == oldlen)
 					    && !memcmp(shortname,oldname,
@@ -2723,8 +2725,8 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 					}
 			} else {
 				if (flags & XATTR_REPLACE) {
-					res = -1;
-					errno = ENODATA;
+					res = -ENODATA;
+//					errno = ENODATA;
 				} else {
 					res = set_dos_name(ni, dir_ni,
 						shortname, shortlen,
@@ -2736,16 +2738,18 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 		} else
 			res = -1;
 	} else {
-		res = -1;
-		if (!longlen)
-			errno = ENOENT;
+		res = longlen ? : -ENOENT;
+//		if (!longlen)
+//			errno = ENOENT;
+//			res = -ENOENT;
 	}
 	free(shortname);
 	if (!closed) {
 		ntfs_inode_close_in_dir(ni,dir_ni);
 		ntfs_inode_close(dir_ni);
 	}
-	return (res ? -1 : 0);
+	return res;
+//	return (res ? -1 : 0);
 }
 
 /*
@@ -2764,7 +2768,7 @@ int ntfs_remove_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 	ntfschar shortname[MAX_DOS_NAME_LENGTH];
 	ntfschar longname[NTFS_MAX_NAME_LEN];
 
-	res = -1;
+//	res = -1;
 	vol = ni->vol;
 	dnum = dir_ni->mft_no;
 	longlen = get_long_name(ni, dnum, longname);
@@ -2783,7 +2787,8 @@ int ntfs_remove_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 				/* name was DOS, make it back to DOS */
 				set_namespace(ni,dir_ni,longname,longlen,
 						FILE_NAME_DOS);
-				errno = ENOENT;
+//				errno = ENOENT;
+				res = -ENOENT;
 				break;
 			case FILE_NAME_WIN32 :
 				/* name was Win32, make it Posix and delete */
@@ -2801,7 +2806,8 @@ int ntfs_remove_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 					 * migrate to Posix : something bad 
 					 * has happened
 					 */
-					errno = EIO;
+//					errno = EIO;
+					res = -EIO;
 					ntfs_log_error("Could not change"
 						" DOS name of inode %lld to Posix\n",
 						(long long)ni->mft_no);
@@ -2809,14 +2815,17 @@ int ntfs_remove_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 				break;
 			default :
 				/* name was Posix or not found : error */
-				errno = ENOENT;
+//				errno = ENOENT;
+				res = -ENOENT;
 				break;
 			}
-		}
+		}else
+			res = shortlen;
 	} else {
-		if (!longlen)
-			errno = ENOENT;
-		res = -1;
+		res = longlen ? : -ENOENT;
+//		if (!longlen)
+//			errno = ENOENT;
+//		res = -1;
 	}
 	if (!deleted) {
 		ntfs_inode_close_in_dir(ni,dir_ni);
