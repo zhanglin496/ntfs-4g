@@ -39,6 +39,7 @@ static struct inode *ntfs_alloc_inode(struct super_block *sb)
 	ni = (ntfs_inode*)ntfs_calloc(sizeof(ntfs_inode));
 	if (!ni)
 		return NULL;
+	ni->vol = sb->s_fs_info;
 	inode_set_iversion(&ni->vfs_inode, 1);
 	inode_init_once(&ni->vfs_inode);
 	return &ni->vfs_inode;
@@ -750,8 +751,6 @@ static ntfs_inode *ntfs_inode_get(struct super_block *sb,
 		err = -EINVAL;
 		goto err_out;
 	}
-
-	ni->vol = vol;
 	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
 		goto err_out;
 	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
