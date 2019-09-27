@@ -431,9 +431,11 @@ static int ntfs_mftmirr_load(ntfs_volume *vol)
 	vol->mftmirr_ni = ntfs_inode_open(vol, FILE_MFTMirr);
 	if (IS_ERR(vol->mftmirr_ni)) {
 		ntfs_log_perror("Failed to open inode $MFTMirr");
-		return PTR_ERR(vol->mftmirr_ni);
+		err = PTR_ERR(vol->mftmirr_ni);
+		vol->mftmirr_ni = NULL;
+		return err;
 	}
-	
+
 	vol->mftmirr_na = ntfs_attr_open(vol->mftmirr_ni, AT_DATA, AT_UNNAMED, 0);
 	if (IS_ERR(vol->mftmirr_na)) {
 		ntfs_log_perror("Failed to open $MFTMirr/$DATA");

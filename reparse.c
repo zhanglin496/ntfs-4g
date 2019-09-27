@@ -221,7 +221,10 @@ static char *search_absolute(ntfs_volume *vol, ntfschar *path,
 
 	target = (char*)NULL; /* default return */
 	ni = ntfs_inode_open(vol, (MFT_REF)FILE_root);
-	if (!IS_ERR(ni)) {
+	if (IS_ERR(ni))
+		ni = NULL;
+
+	if (ni) {
 		start = 0;
 		/*
 		 * Examine and translate the path, until we reach either
@@ -244,7 +247,9 @@ static char *search_absolute(ntfs_volume *vol, ntfschar *path,
 			ni = (ntfs_inode*)NULL;
 			if (inum != (u64)-1) {
 				inum = MREF(inum);
-				ni = ntfs_inode_open(vol, inum);
+				ni = ntfs_inode_open(vol, inum);				
+				if (IS_ERR(ni))
+					ni = NULL;
 				start += len;
 				if (start < count)
 					path[start++] = const_cpu_to_le16('/');
