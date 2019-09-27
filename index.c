@@ -1830,6 +1830,7 @@ int ntfs_index_rm(ntfs_index_context *icx)
 	
 	if (!icx || (!icx->ib && !icx->ir) || ntfs_ie_end(icx->entry)) {
 		ntfs_log_error("Invalid arguments.\n");
+		ret = -EINVAL;
 //		errno = EINVAL;
 		goto err_out;
 	}

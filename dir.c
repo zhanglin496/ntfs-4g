@@ -1893,6 +1893,7 @@ int ntfs_delete(ntfs_volume *vol, const char *pathname,
 	FILE_NAME_ATTR *fn = NULL;
 	BOOL looking_for_dos_name = FALSE, looking_for_win32_name = FALSE;
 	BOOL case_sensitive_match = TRUE;
+	int ret;
 	int err = 0;
 #if CACHE_NIDATA_SIZE
 	int i;
@@ -1931,7 +1932,7 @@ int ntfs_delete(ntfs_volume *vol, const char *pathname,
 		goto err_out;
 	}
 search:
-	while (!(err = ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0,
+	while (!(ret = ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0,
 					CASE_SENSITIVE, 0, NULL, 0, actx))) {
 	#ifdef DEBUG
 		char *s;
@@ -1988,12 +1989,12 @@ search:
 			break;
 		}
 	}
-	if (err) {
+	if (ret) {
 		/*
 		 * If case sensitive search failed, then try once again
 		 * ignoring case.
 		 */
-		if (err == -ENOENT && case_sensitive_match) {
+		if (ret == -ENOENT && case_sensitive_match) {
 			case_sensitive_match = FALSE;
 			ntfs_attr_reinit_search_ctx(actx);
 			goto search;
@@ -2001,10 +2002,10 @@ search:
 		goto err_out;
 	}
 	
-	if ((err = ntfs_check_unlinkable_dir(ni, fn)) < 0)
+	if ((ret = ntfs_check_unlinkable_dir(ni, fn)) < 0)
 		goto err_out;
 		
-	if (ntfs_index_remove(dir_ni, ni, fn, le32_to_cpu(actx->attr->value_length)))
+	if ((ret = ntfs_index_remove(dir_ni, ni, fn, le32_to_cpu(actx->attr->value_length))))
 		goto err_out;
 	
 	/*
@@ -2016,7 +2017,7 @@ search:
 			/* make sure to not loop to another search */
 		looking_for_dos_name = FALSE;
 	} else {
-		if ((err = ntfs_attr_record_rm(actx)))
+		if ((ret = ntfs_attr_record_rm(actx)))
 			goto err_out;
 	}
 	
@@ -2072,31 +2073,31 @@ search:
 		ntfs_inode_update_times(ni, NTFS_UPDATE_CTIME);
 		goto ok;
 	}
-	if (ntfs_delete_reparse_index(ni)) {
+	if ((ret = ntfs_delete_reparse_index(ni))) {
 		/*
 		 * Failed to remove the reparse index : proceed anyway
 		 * This is not a critical error, the entry is useless
 		 * because of sequence_number, and stopping file deletion
 		 * would be much worse as the file is not referenced now.
 		 */
-		err = errno;
+//		err = errno;
 	}
-	if (ntfs_delete_object_id_index(ni)) {
+	if ((ret = ntfs_delete_object_id_index(ni))) {
 		/*
 		 * Failed to remove the object id index : proceed anyway
 		 * This is not a critical error.
 		 */
-		err = errno;
+//		err = errno;
 	}
 	ntfs_attr_reinit_search_ctx(actx);
-	while (!ntfs_attrs_walk(actx)) {
+	while (!(ret = ntfs_attrs_walk(actx))) {
 		if (actx->attr->non_resident) {
 			runlist *rl;
 
 			rl = ntfs_mapping_pairs_decompress(ni->vol, actx->attr,
 					NULL);
 			if (!rl) {
-				err = errno;
+//				err = errno;
 				ntfs_log_error("Failed to decompress runlist.  "
 						"Leaving inconsistent metadata.\n");
 				continue;
@@ -2110,8 +2111,9 @@ search:
 			free(rl);
 		}
 	}
-	if (errno != ENOENT) {
-		err = errno;
+	if (ret != -ENOENT) {
+		err = ret;
+//		err = errno;
 		ntfs_log_error("Attribute enumeration failed.  "
 				"Probably leaving inconsistent metadata.\n");
 	}
@@ -2124,8 +2126,9 @@ search:
 	for (i=ni->nr_extents-1; i>=0; i--) {
 		ni->extent_nis[i]->base_ni = (ntfs_inode*)NULL;
 		ni->extent_nis[i]->nr_extents = 0;
-		if ((err = ntfs_mft_record_free(ni->vol, ni->extent_nis[i]))) {
+		if ((ret = ntfs_mft_record_free(ni->vol, ni->extent_nis[i]))) {
 //			err = errno;
+			err = ret;
 			ntfs_log_error("Failed to free extent MFT record.  "
 					"Leaving inconsistent metadata.\n");
 		}
@@ -2135,15 +2138,17 @@ search:
 	ni->extent_nis = (ntfs_inode**)NULL;
 #else
 	while (ni->nr_extents)
-		if ((err = ntfs_mft_record_free(ni->vol, *(ni->extent_nis)))) {
+		if ((ret = ntfs_mft_record_free(ni->vol, *(ni->extent_nis)))) {
 //			err = errno;
+			err = ret;
 			ntfs_log_error("Failed to free extent MFT record.  "
 					"Leaving inconsistent metadata.\n");
 		}
 #endif
 	debug_double_inode(ni->mft_no,0);
-	if ((err = ntfs_mft_record_free(ni->vol, ni))) {
+	if ((ret = ntfs_mft_record_free(ni->vol, ni))) {
 //		err = errno;
+		err = ret;
 		ntfs_log_error("Failed to free base MFT record.  "
 				"Leaving inconsistent metadata.\n");
 	}
@@ -2153,10 +2158,10 @@ ok:
 out:
 	if (actx)
 		ntfs_attr_put_search_ctx(actx);
-	if (ntfs_inode_close(dir_ni) && !err)
-		err = errno;
-	if (ntfs_inode_close(ni) && !err)
-		err = errno;
+	if ((ret = ntfs_inode_close(dir_ni)) && !err)
+		err = ret;
+	if ((ret = ntfs_inode_close(ni)) && !err)
+		err = ret;
 	if (err) {
 //		errno = err;
 		ntfs_log_debug("Could not delete file:\n");
