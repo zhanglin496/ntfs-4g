@@ -603,7 +603,7 @@ ntfs_inode *ntfs_extent_inode_open(ntfs_inode *base_ni, const leMFT_REF mref)
 	int i;
 
 	if (!base_ni) {
-		errno = EINVAL;
+//		errno = EINVAL;
 		ntfs_log_perror("%s", __FUNCTION__);
 		return NULL;
 	}
@@ -637,7 +637,7 @@ ntfs_inode *ntfs_extent_inode_open(ntfs_inode *base_ni, const leMFT_REF mref)
 					(long long)mft_no);
 			ntfs_log_error("Note : chkdsk cannot fix this,"
 				" try ntfsfix\n");
-			errno = EIO;
+//			errno = EIO;
 			ni = (ntfs_inode*)NULL;
 			goto out;
 		}
@@ -656,7 +656,7 @@ ntfs_inode *ntfs_extent_inode_open(ntfs_inode *base_ni, const leMFT_REF mref)
 			seq_no = MSEQNO_LE(mref);
 			if (seq_no && seq_no != le16_to_cpu(
 					ni->mrec->sequence_number)) {
-				errno = EIO;
+//				errno = EIO;
 				ntfs_log_perror("Found stale extent mft "
 					"reference mft=%lld",
 					(long long)ni->mft_no);
