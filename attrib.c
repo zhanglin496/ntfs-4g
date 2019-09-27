@@ -128,7 +128,7 @@ s64 ntfs_get_attribute_value_length(const ATTR_RECORD *a)
 {
 	if (!a) {
 //		errno = EINVAL;
-		return -EINVAL;
+		return 0;
 	}
 //	errno = 0;
 	if (a->non_resident)

@@ -722,7 +722,7 @@ int ntfs_empty_logfile(ntfs_attr *na)
 	if (!NAttrNonResident(na)) {
 		errno = EIO;
 		ntfs_log_perror("Resident $LogFile $DATA attribute");
-		return -1;
+		return -EIO;
 	}
 
 	memset(buf, -1, NTFS_BUF_SIZE);
@@ -738,7 +738,7 @@ int ntfs_empty_logfile(ntfs_attr *na)
 			ntfs_log_perror("Failed to reset $LogFile");
 			if (count != -1)
 				errno = EIO;
-			return -1;
+			return -EIO;
 		}
 		pos += count;
 	}

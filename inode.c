@@ -187,8 +187,10 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 		goto out;
 	}
 	ni = __ntfs_inode_allocate(vol);
-	if (!ni)
+	if (!ni) {
+		err = -ENOMEM;
 		goto out;
+	}
 	if (ntfs_file_record_read(vol, mref, &ni->mrec, NULL))
 		goto err_out;
 	if (!(ni->mrec->flags & MFT_RECORD_IN_USE)) {
@@ -197,11 +199,13 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	}
 	ni->mft_no = MREF(mref);
 	ctx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (!ctx)
+	if (!ctx) {
+		err = -ENOMEM;
 		goto err_out;
+	}
 	/* Receive some basic information about inode. */
-	if (ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
-				0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+	if ((err = ntfs_attr_lookup(AT_STANDARD_INFORMATION, AT_UNNAMED,
+				0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 		if (!ni->mrec->base_mft_record)
 			ntfs_log_perror("No STANDARD_INFORMATION in base record"
 					" %lld", (long long)MREF(mref));
@@ -239,8 +243,10 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	}
 	NInoSetAttrList(ni);
 	l = ntfs_get_attribute_value_length(ctx->attr);
-	if (!l)
+	if (!l) {
+		err = -EINVAL;
 		goto put_err_out;
+	}
 	if (l > 0x40000) {
 		err = -EIO;
 		ntfs_log_perror("Too large attrlist attribute (%lld), inode "
@@ -249,11 +255,15 @@ static ntfs_inode *ntfs_inode_real_open(ntfs_volume *vol, const MFT_REF mref)
 	}
 	ni->attr_list_size = l;
 	ni->attr_list = ntfs_malloc(ni->attr_list_size);
-	if (!ni->attr_list)
+	if (!ni->attr_list) {
+		err = -ENOMEM;
 		goto put_err_out;
+	}
 	l = ntfs_get_attribute_value(vol, ctx->attr, ni->attr_list);
-	if (!l)
+	if (!l) {
+		err = -EINVAL;
 		goto put_err_out;
+	}
 	if (l != ni->attr_list_size) {
 		err = -EIO;
 		ntfs_log_perror("Unexpected attrlist size (%lld <> %u), inode "
@@ -287,7 +297,7 @@ get_size:
 	ntfs_attr_put_search_ctx(ctx);
 out:	
 	ntfs_log_leave("\n");
-	return ni;
+	return ni ? : ERR_PTR(err);
 
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
@@ -807,6 +817,7 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 	FILE_NAME_ATTR *fnx;
 	REPARSE_POINT *rpp;
 	le32 reparse_tag;
+	int ret;
 	int err = 0;
 
 	ntfs_log_trace("Entering for inode %lld\n", (long long)ni->mft_no);
@@ -819,8 +830,8 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 	/* Collect the reparse tag, if any */
 	reparse_tag = const_cpu_to_le32(0);
 	if (ni->flags & FILE_ATTR_REPARSE_POINT) {
-		if (!ntfs_attr_lookup(AT_REPARSE_POINT, NULL,
-				0, CASE_SENSITIVE, 0, NULL, 0, ctx)) {
+		if (!(ret = ntfs_attr_lookup(AT_REPARSE_POINT, NULL,
+				0, CASE_SENSITIVE, 0, NULL, 0, ctx))) {
 			rpp = (REPARSE_POINT*)((u8 *)ctx->attr +
 					le16_to_cpu(ctx->attr->value_offset));
 			reparse_tag = rpp->reparse_tag;
@@ -828,7 +839,7 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 		ntfs_attr_reinit_search_ctx(ctx);
 	}
 	/* Walk through all FILE_NAME attributes and update them. */
-	while (!ntfs_attr_lookup(AT_FILE_NAME, NULL, 0, 0, 0, NULL, 0, ctx)) {
+	while (!(ret = ntfs_attr_lookup(AT_FILE_NAME, NULL, 0, 0, 0, NULL, 0, ctx))) {
 		fn = (FILE_NAME_ATTR *)((u8 *)ctx->attr +
 				le16_to_cpu(ctx->attr->value_offset));
 		if (MREF_LE(fn->parent_directory) == ni->mft_no) {
@@ -846,9 +857,10 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 			else
 				index_ni = ntfs_inode_open(ni->vol, 
 					le64_to_cpu(fn->parent_directory));
-		if (!index_ni) {
+		if (IS_ERR(index_ni)) {
 			if (!err)
-				err = errno;
+				err = PTR_ERR(index_ni);
+//				err = errno;
 			ntfs_log_perror("Failed to open inode %lld with index",
 				(long long)le64_to_cpu(fn->parent_directory));
 			continue;
@@ -856,26 +868,26 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 		ictx = ntfs_index_ctx_get(index_ni, NTFS_INDEX_I30, 4);
 		if (!ictx) {
 			if (!err)
-				err = errno;
+				err = -ENOMEM;
 			ntfs_log_perror("Failed to get index ctx, inode %lld",
 					(long long)index_ni->mft_no);
 			if ((ni != index_ni) && !dir_ni
-			    && ntfs_inode_close(index_ni) && !err)
-				err = errno;
+			    && (ret = ntfs_inode_close(index_ni)) && !err)
+				err = ret;
 			continue;
 		}
-		if (ntfs_index_lookup(fn, sizeof(FILE_NAME_ATTR), ictx)) {
+		if ((ret = ntfs_index_lookup(fn, sizeof(FILE_NAME_ATTR), ictx))) {
 			if (!err) {
-				if (errno == ENOENT)
-					err = EIO;
+				if (ret == -ENOENT)
+					err = -EIO;
 				else
-					err = errno;
+					err = ret;
 			}
 			ntfs_log_perror("Index lookup failed, inode %lld",
 					(long long)index_ni->mft_no);
 			ntfs_index_ctx_put(ictx);
-			if (ni != index_ni && ntfs_inode_close(index_ni) && !err)
-				err = errno;
+			if (ni != index_ni && (ret = ntfs_inode_close(index_ni)) && !err)
+				err = ret;
 			continue;
 		}
 		/* Update flags and file size. */
@@ -912,27 +924,27 @@ static int ntfs_inode_sync_file_name(ntfs_inode *ni, ntfs_inode *dir_ni)
 		ntfs_index_entry_mark_dirty(ictx);
 		ntfs_index_ctx_put(ictx);
 		if ((ni != index_ni) && !dir_ni
-		    && ntfs_inode_close(index_ni) && !err)
-			err = errno;
+		    && (ret = ntfs_inode_close(index_ni)) && !err)
+			err = ret;
 	}
 	/* Check for real error occurred. */
-	if (errno != ENOENT) {
-		err = errno;
+	if (ret != -ENOENT) {
+		err = ret;
 		ntfs_log_perror("Attribute lookup failed, inode %lld",
 				(long long)ni->mft_no);
 		goto err_out;
 	}
 	ntfs_attr_put_search_ctx(ctx);
-	if (err) {
-		errno = err;
-		return -1;
-	}
+//	if (err) {
+//		errno = err;
+//		return -1;
+//	}
 	return 0;
 err_out:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
-	errno = err;
-	return -1;
+//	errno = err;
+	return err;
 }
 
 /**

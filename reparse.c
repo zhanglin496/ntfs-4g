@@ -221,7 +221,7 @@ static char *search_absolute(ntfs_volume *vol, ntfschar *path,
 
 	target = (char*)NULL; /* default return */
 	ni = ntfs_inode_open(vol, (MFT_REF)FILE_root);
-	if (ni) {
+	if (!IS_ERR(ni)) {
 		start = 0;
 		/*
 		 * Examine and translate the path, until we reach either
@@ -342,7 +342,7 @@ static char *search_relative(ntfs_inode *ni, ntfschar *path, int count)
 					ok = FALSE;
 				else {
 					curni = ntfs_inode_open(ni->vol, MREF(inum));
-					if (!curni)
+					if (IS_ERR(curni))
 						ok = FALSE;
 					else {
 						if (curni->flags & FILE_ATTR_REPARSE_POINT)
@@ -953,10 +953,13 @@ static ntfs_index_context *open_reparse_index(ntfs_volume *vol)
 		/* do not use path_name_to inode - could reopen root */
 	dir_ni = ntfs_inode_open(vol, FILE_Extend);
 	ni = (ntfs_inode*)NULL;
-	if (dir_ni) {
+	if (!IS_ERR(dir_ni)) {
 		inum = ntfs_inode_lookup_by_mbsname(dir_ni,"$Reparse");
-		if (inum != (u64)-1)
+		if (inum != (u64)-1) {
 			ni = ntfs_inode_open(vol, inum);
+			if (IS_ERR(ni))
+				ni= NULL;
+		}
 		ntfs_inode_close(dir_ni);
 	}
 	if (ni) {

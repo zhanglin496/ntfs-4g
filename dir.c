@@ -730,7 +730,7 @@ ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 			 */
 			inum = MREF(cached->inum);
 			ni = ntfs_inode_open(vol, inum);
-			if (!ni) {
+			if (IS_ERR(ni)) {
 				ntfs_log_debug("Cannot open inode %llu: %s.\n",
 						(unsigned long long)inum, p);
 				err = -EIO;
@@ -2300,6 +2300,8 @@ ntfs_inode *ntfs_dir_parent_inode(ntfs_inode *ni)
 			inum = le64_to_cpu(fn->parent_directory);
 			if (inum != (u64)-1) {
 				dir_ni = ntfs_inode_open(ni->vol, MREF(inum));
+				if (IS_ERR(dir_ni))
+					dir_ni = NULL;
 			}
 		}
 		ntfs_attr_put_search_ctx(ctx);
@@ -2622,9 +2624,9 @@ static int set_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 				 deletename, deletelen)) {
 			/* delete closes the inodes, so have to open again */
 				dir_ni = ntfs_inode_open(vol, dnum);
-				if (dir_ni) {
+				if (!IS_ERR(dir_ni)) {
 					ni = ntfs_inode_open(vol, fnum);
-					if (ni) {
+					if (!IS_ERR(ni)) {
 						if (!ntfs_link_i(ni, dir_ni,
 							longname, longlen,
 							FILE_NAME_WIN32))

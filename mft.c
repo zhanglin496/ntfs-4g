@@ -1400,7 +1400,7 @@ ntfs_inode *ntfs_mft_rec_alloc(ntfs_volume *vol, BOOL mft_data)
 			 * use as an extent. Apply standard procedure for
 			 * further extents.
 			 */
-		if (ext_ni) {
+		if (!IS_ERR(ext_ni)) {
 			/*
 			 * Make sure record 15 is a base extent and has
 			 * no extents.

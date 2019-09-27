@@ -831,7 +831,7 @@ static int fix_txf_data(ntfs_volume *vol)
 	res = 0;
 	ntfs_log_debug("Loading root directory\n");
 	ni = ntfs_inode_open(vol, FILE_root);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Failed to open root directory");
 		res = -1;
 	} else {
@@ -1003,7 +1003,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	/* Now load the bitmap from $Bitmap. */
 	ntfs_log_debug("Loading $Bitmap...\n");
 	vol->lcnbmp_ni = ntfs_inode_open(vol, FILE_Bitmap);
-	if (!vol->lcnbmp_ni) {
+	if (IS_ERR(vol->lcnbmp_ni)) {
 		ntfs_log_perror("Failed to open inode FILE_Bitmap");
 		goto error_exit;
 	}
@@ -1024,7 +1024,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	/* Now load the upcase table from $UpCase. */
 	ntfs_log_debug("Loading $UpCase...\n");
 	ni = ntfs_inode_open(vol, FILE_UpCase);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Failed to open inode FILE_UpCase");
 		goto error_exit;
 	}
@@ -1087,7 +1087,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	 */
 	ntfs_log_debug("Loading $Volume...\n");
 	vol->vol_ni = ntfs_inode_open(vol, FILE_Volume);
-	if (!vol->vol_ni) {
+	if (IS_ERR(vol->vol_ni)) {
 		ntfs_log_perror("Failed to open inode FILE_Volume");
 		goto error_exit;
 	}
@@ -1187,7 +1187,7 @@ ntfs_volume *ntfs_device_mount(struct super_block *sb, ntfs_mount_flags flags)
 	/* Now load the attribute definitions from $AttrDef. */
 	ntfs_log_debug("Loading $AttrDef...\n");
 	ni = ntfs_inode_open(vol, FILE_AttrDef);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Failed to open $AttrDef");
 		goto error_exit;
 	}
@@ -1582,25 +1582,26 @@ int ntfs_logfile_reset(ntfs_volume *vol)
 	int eo;
 
 	if (!vol) {
-		errno = EINVAL;
-		return -1;
+//		errno = EINVAL;
+		return -EINVAL;
 	}
 
 	ni = ntfs_inode_open(vol, FILE_LogFile);
-	if (!ni) {
+	if (IS_ERR(ni)) {
 		ntfs_log_perror("Failed to open inode FILE_LogFile");
-		return -1;
+		return PTR_ERR(ni);
 	}
 
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
 	if (IS_ERR(na)) {
-		eo = errno;
+//		eo = errno;
+		eo = PTR_ERR(ni);
 		ntfs_log_perror("Failed to open $FILE_LogFile/$DATA");
 		goto error_exit;
 	}
 
-	if (ntfs_empty_logfile(na)) {
-		eo = errno;
+	if ((eo = ntfs_empty_logfile(na))) {
+//		eo = errno;
 		ntfs_attr_close(na);
 		goto error_exit;
 	}
@@ -1610,8 +1611,8 @@ int ntfs_logfile_reset(ntfs_volume *vol)
 
 error_exit:
 	ntfs_inode_close(ni);
-	errno = eo;
-	return -1;
+//	errno = eo;
+	return eo;
 }
 
 /**

@@ -192,10 +192,13 @@ static ntfs_index_context *open_object_id_index(ntfs_volume *vol)
 		/* do not use path_name_to inode - could reopen root */
 	dir_ni = ntfs_inode_open(vol, FILE_Extend);
 	ni = (ntfs_inode*)NULL;
-	if (dir_ni) {
+	if (!IS_ERR(dir_ni)) {
 		inum = ntfs_inode_lookup_by_mbsname(dir_ni,"$ObjId");
-		if (inum != (u64)-1)
+		if (inum != (u64)-1) {
 			ni = ntfs_inode_open(vol, inum);
+			if (IS_ERR(ni))
+				ni = NULL;
+		}
 		ntfs_inode_close(dir_ni);
 	}
 	if (ni) {
