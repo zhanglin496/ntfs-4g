@@ -1526,7 +1526,7 @@ int ntfs_ie_add(ntfs_index_context *icx, INDEX_ENTRY *ie)
 	err = 0;
 //	ret = STATUS_OK;
 err_out:
-	ntfs_log_trace("%s\n", ret ? "Failed" : "Done");
+	ntfs_log_trace("%s\n", err ? "Failed" : "Done");
 	return err;
 }
 
@@ -1542,7 +1542,7 @@ int ntfs_index_add_filename(ntfs_inode *ni, FILE_NAME_ATTR *fn, MFT_REF mref)
 {
 	INDEX_ENTRY *ie;
 	ntfs_index_context *icx;
-	int fn_size, ie_size, err, ret = -1;
+	int fn_size, ie_size, ret = -1;
 
 	ntfs_log_trace("Entering\n");
 	
