@@ -2815,6 +2815,7 @@ static int ntfs_attr_find(const ATTR_TYPES type, const ntfschar *name,
 		upcase = NULL;
 		upcase_len = 0;
 	}
+	ntfs_log_trace("ntfs_ino %p\n", ctx->ntfs_ino);
 	/*
 	 * Iterate over attributes in mft record starting at @ctx->attr, or the
 	 * attribute following that, if @ctx->is_first is TRUE.
