@@ -2581,6 +2581,7 @@ static int set_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 	FILE_NAME_TYPE_FLAGS oldnametype;
 	u64 dnum;
 	u64 fnum;
+	int ret;
 	int res;
 
 	res = -1;
@@ -2618,10 +2619,10 @@ static int set_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 				res = 0;
 			ntfs_inode_update_times(ni, NTFS_UPDATE_CTIME);
 			ntfs_inode_update_times(dir_ni, NTFS_UPDATE_MCTIME);
-			if (ntfs_inode_close_in_dir(ni,dir_ni) && !res)
-				res = -1;
-			if (ntfs_inode_close(dir_ni) && !res)
-				res = -1;
+			if ((ret = ntfs_inode_close_in_dir(ni,dir_ni)) && !res)
+				res = ret;
+			if ((ret = ntfs_inode_close(dir_ni)) && !res)
+				res = ret;
 		}
 	} else {
 		if (!ntfs_link_i(ni, dir_ni, shortname, shortlen, 
@@ -2641,13 +2642,12 @@ static int set_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 							longname, longlen,
 							FILE_NAME_WIN32))
 							res = 0;
-						if (ntfs_inode_close_in_dir(ni,
-							dir_ni)
-						    && !res)
-							res = -1;
+						if ((ret = ntfs_inode_close_in_dir(ni,
+							dir_ni)) && !res)
+							res = ret;
 					}
-				if (ntfs_inode_close(dir_ni) && !res)
-					res = -1;
+				if ((ret = ntfs_inode_close(dir_ni)) && !res)
+					res = ret;
 				}
 			}
 		} else {
@@ -2701,7 +2701,8 @@ int ntfs_set_ntfs_dos_name(ntfs_inode *ni, ntfs_inode *dir_ni,
 	    || ntfs_forbidden_names(ni->vol,shortname,shortlen,TRUE)) {
 		ntfs_inode_close_in_dir(ni,dir_ni);
 		ntfs_inode_close(dir_ni);
-		res = -errno;
+//		res = -errno;
+		res = -EINVAL;
 		return res;
 	}
 	dnum = dir_ni->mft_no;
