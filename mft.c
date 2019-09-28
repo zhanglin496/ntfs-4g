@@ -1376,6 +1376,7 @@ ntfs_inode *ntfs_mft_rec_alloc(ntfs_volume *vol, BOOL mft_data)
 	ntfs_attr *mft_na, *mftbmp_na;
 	MFT_RECORD *m;
 	ntfs_inode *ni = NULL;
+	struct inode *inode = NULL;
 	ntfs_inode *base_ni;
 	int err;
 	le16 seq_no, usn;
@@ -1482,6 +1483,17 @@ found_free_rec:
 		*(le16*)((u8*)m + le16_to_cpu(m->usa_ofs)) = usn;
 	/* Set the mft record itself in use. */
 	m->flags |= MFT_RECORD_IN_USE;
+	
+	inode = new_inode(vol->sb);
+	if (!inode) {
+		err = -ENOMEM;
+		free(m);
+		goto undo_mftbmp_alloc;
+	}
+	inode->i_no = MREF(bit);
+	ni = EXNTFS_I(inode);
+
+#if 0
 	/* Now need to open an ntfs inode for the mft record. */
 	ni = ntfs_inode_allocate(vol);
 	if (!ni) {
@@ -1490,6 +1502,8 @@ found_free_rec:
 		err = -ENOMEM;
 		goto undo_mftbmp_alloc;
 	}
+#endif
+
 	ni->mft_no = bit;
 	ni->mrec = m;
 	/*
@@ -1550,6 +1564,11 @@ undo_mftbmp_alloc:
 		ntfs_log_error("Failed to clear bit in mft bitmap.%s\n", es);
 //	errno = err;
 err_out:
+	if (inode) {
+		make_bad_inode(inode);
+		iput(inode);
+	}
+
 //	if (!errno)
 //		errno = EIO;
 	ni = NULL;
@@ -1645,7 +1664,8 @@ ntfs_inode *ntfs_mft_record_alloc(ntfs_volume *vol, ntfs_inode *base_ni)
 	s64 ll, bit;
 	ntfs_attr *mft_na, *mftbmp_na;
 	MFT_RECORD *m;
-	ntfs_inode *ni = NULL;
+	ntfs_inode *ni = NULL;	
+	struct inode *inode = NULL;
 	int err;
 	u32 usa_ofs;
 	le16 seq_no, usn;
@@ -1817,14 +1837,23 @@ found_free_rec:
 		*(le16*)((u8*)m + le16_to_cpu(m->usa_ofs)) = usn;
 	/* Set the mft record itself in use. */
 	m->flags |= MFT_RECORD_IN_USE;
-	/* Now need to open an ntfs inode for the mft record. */
-	ni = ntfs_inode_allocate(vol);
-	if (!ni) {
-		ntfs_log_error("Failed to allocate buffer for inode.\n");
+
+	inode = new_inode(vol->sb);
+	if (!inode) {
 		err = -ENOMEM;
 		free(m);
 		goto undo_mftbmp_alloc;
 	}
+	/* Now need to open an ntfs inode for the mft record. */
+//	ni = ntfs_inode_allocate(vol);
+//	if (!ni) {
+//		ntfs_log_error("Failed to allocate buffer for inode.\n");
+//		err = -ENOMEM;
+//		free(m);
+//		goto undo_mftbmp_alloc;
+//	}
+	ni = EXNTFS_I(inode);
+	inode->i_ino = MREF(bit);
 	ni->mft_no = bit;
 	ni->mrec = m;
 	/*
@@ -1887,6 +1916,10 @@ undo_mftbmp_alloc:
 		ntfs_log_error("Failed to clear bit in mft bitmap.%s\n", es);
 //	errno = err;
 err_out:
+	if (inode) {
+		make_bad_inode(inode);
+		iput(inode);
+	}
 //	if (!errno)
 //		errno = EIO;
 	ni = NULL;
