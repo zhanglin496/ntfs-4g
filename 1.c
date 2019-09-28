@@ -3,6 +3,6 @@
 
 int main()
 {
-      printf("%d\n", mount("/dev/sdb", "./test",
+      printf("%d\n", mount("/dev/sdb1", "./test",
                  	"ntfs-4g", 0, NULL));
 }

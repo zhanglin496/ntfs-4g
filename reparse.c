@@ -928,7 +928,7 @@ static int remove_reparse_index(ntfs_attr *na, ntfs_index_context *xr,
 			key.reparse_tag = *preparse_tag;
 		/* danger on processors which require proper alignment ! */
 			memcpy(&key.file_id, &file_id, 8);
-			if (!(ret = ntfs_index_lookup(&key, sizeof(REPARSE_INDEX_KEY), xr))
+			if (!(ret = ntfs_index_lookup(&key, sizeof(REPARSE_INDEX_KEY), xr)))
 			    ret = ntfs_index_rm(xr);
 //				ret = -1;
 		} else {
