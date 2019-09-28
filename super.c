@@ -532,12 +532,13 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 		err = inum;
 		goto close;
 	}
-	if (ni != parent)
+	if (ni != parent) {
 		if (ntfs_inode_close(ni)) {
 			err = -EIO;
 //				err = errno;
 			goto out;
 		}
+	}
 
 	inum = MREF(inum);
 	inode = ntfs_iget(vol->sb, inum);

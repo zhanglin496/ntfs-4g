@@ -1956,7 +1956,7 @@ search:
 				continue;
 		}
 		if (looking_for_win32_name) {
-			if  (fn->file_name_type == FILE_NAME_WIN32)
+			if (fn->file_name_type == FILE_NAME_WIN32)
 				break;
 			else
 				continue;
