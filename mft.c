@@ -57,6 +57,7 @@
 #include "mft.h"
 #include "logging.h"
 #include "misc.h"
+#include "super.h"
 
 static int errno;
 /**
@@ -1490,7 +1491,7 @@ found_free_rec:
 		free(m);
 		goto undo_mftbmp_alloc;
 	}
-	inode->i_no = MREF(bit);
+	inode->i_ino = MREF(bit);
 	ni = EXNTFS_I(inode);
 
 #if 0

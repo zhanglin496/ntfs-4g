@@ -436,6 +436,7 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 {
+	return -EINVAL;
 	return -EIO;
 
 	return block_write_full_page(page, ntfs_get_block, wbc);
@@ -443,6 +444,7 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 
 static int ntfs_readpage(struct file *file, struct page *page)
 {
+	return -EINVAL;
 	return -EIO;
 
 	return block_read_full_page(page, ntfs_get_block);
