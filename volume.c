@@ -1828,15 +1828,13 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 
 		/* The volume name attribute does not exist.  Need to add it. */
 		if ((err = ntfs_attr_add(vol->vol_ni, AT_VOLUME_NAME, AT_UNNAMED, 0,
-			(const u8*) label, label_len)))
-		{
+			(const u8*) label, label_len))) {
 //			err = errno;
 			ntfs_log_perror("Encountered error while adding "
 				"$VOLUME_NAME attribute");
 			goto err_out;
 		}
-	}
-	else {
+	} else {
 		s64 written;
 
 		if (NAttrNonResident(na)) {
@@ -1858,12 +1856,11 @@ int ntfs_volume_rename(ntfs_volume *vol, const ntfschar *label, int label_len)
 		if (label_len) {
 			written = ntfs_attr_pwrite(na, 0, label_len, label);
 			if (written == -1) {
-				err = errno;
+				err = -EIO;
 				ntfs_log_perror("Error when writing "
 					"$VOLUME_NAME data");
 				goto err_out;
-			}
-			else if (written != label_len) {
+			} else if (written != label_len) {
 				err = -EIO;
 				ntfs_log_error("Partial write when writing "
 					"$VOLUME_NAME data.");
