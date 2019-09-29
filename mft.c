@@ -883,7 +883,6 @@ static int ntfs_mft_bitmap_extend_initialized(ntfs_volume *vol)
 	ntfs_attr *mftbmp_na;
 	ntfs_attr_search_ctx *ctx;
 	ATTR_RECORD *a;
-	int err;
 	int ret = -1;
 
 	ntfs_log_enter("Entering\n");
@@ -1423,9 +1422,10 @@ ntfs_inode *ntfs_mft_rec_alloc(ntfs_volume *vol, BOOL mft_data)
 	if (bit >= 0)
 		goto found_free_rec;
 
-	if (bit != -ENOSPC)
+	if (bit != -ENOSPC) {
+		err = bit;
 		goto out;
-	
+	}
 	err = -ENOSPC;
 	/* strerror() is intentionally used below, we want to log this error. */
 	ntfs_log_error("No free mft record for $MFT: \n");
@@ -1667,7 +1667,8 @@ ntfs_inode *ntfs_mft_record_alloc(ntfs_volume *vol, ntfs_inode *base_ni)
 		if (IS_ERR(ni)) {
 			err = PTR_ERR(ni);
 			ni = NULL;
-		}
+		} else
+			err = 0;
 		goto out;
 	}
 

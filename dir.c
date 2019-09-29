@@ -50,6 +50,7 @@
 #include <sys/sysmacros.h>
 #endif
 
+#include <linux/types.h>
 #include <linux/stat.h>
 #include <linux/kdev_t.h>
 
@@ -1337,7 +1338,7 @@ skip_index_root:
 		goto dir_err_out;
 	}
 
-	bmp_buf_size = min(bmp_na->data_size - (bmp_pos >> 3), 4096);
+	bmp_buf_size = min_t(s64, bmp_na->data_size - (bmp_pos >> 3), 4096);
 	bmp = ntfs_malloc(bmp_buf_size);
 	if (!bmp)
 		goto err_out;

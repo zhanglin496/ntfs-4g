@@ -51,7 +51,9 @@
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
 #endif
+//#include <linux/byteorder/generic.h>
 
+#if 0
 #ifndef __BYTE_ORDER
 #	if defined(_BYTE_ORDER)
 #		define __BYTE_ORDER _BYTE_ORDER
@@ -267,6 +269,28 @@
 #define cpu_to_sbe16p(x)	(s16)__cpu_to_be16(*(s16*)(x))
 #define cpu_to_sbe32p(x)	(s32)__cpu_to_be32(*(s32*)(x))
 #define cpu_to_sbe64p(x)	(s64)__cpu_to_be64(*(s64*)(x))
+
+#endif
+
+#define cpu_to_sle16(x)		(s16)__cpu_to_le16((s16)(x))
+#define cpu_to_sle32(x)		(s32)__cpu_to_le32((s32)(x))
+#define cpu_to_sle64(x)		(s64)__cpu_to_le64((s64)(x))
+
+#define cpu_to_sle16p(x)	(s16)__cpu_to_le16(*(s16*)(x))
+#define cpu_to_sle32p(x)	(s32)__cpu_to_le32(*(s32*)(x))
+#define cpu_to_sle64p(x)	(s64)__cpu_to_le64(*(s64*)(x))
+
+
+#define sle16_to_cpu(x)		(s16)__le16_to_cpu((s16)(x))
+#define sle32_to_cpu(x)		(s32)__le32_to_cpu((s32)(x))
+#define sle64_to_cpu(x)		(s64)__le64_to_cpu((s64)(x))
+
+#define sle16_to_cpup(x)	(s16)__le16_to_cpu(*(s16*)(x))
+#define sle32_to_cpup(x)	(s32)__le32_to_cpu(*(s32*)(x))
+#define sle64_to_cpup(x)	(s64)__le64_to_cpu(*(s64*)(x))
+
+/* Unsigned from CPU to LE conversion. */
+
 
 /* Constant endianness conversion defines. */
 
