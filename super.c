@@ -431,7 +431,13 @@ out:
 static int ntfs_get_block(struct inode *inode, sector_t block,
 		    struct buffer_head *bh_result, int create)
 {
-	return -EIO;
+	struct buffer_head *bh = sb_bread(EXNTFS_V(inode)->vol->sb, block);
+	if (!bh)
+		return -EIO;
+	memcpy(bh_result->b_data, bh->b_data, min_t(size_t, bh->b_size, bh_result->b_size));
+	ntfs_log_debug("%s\n", __func__);
+	brelse(bh);
+	return 0;
 }
 
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
@@ -443,7 +449,7 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 
 static int ntfs_readpage(struct file *file, struct page *page)
 {
-	return -EIO;
+//	return -EIO;
 
 	return block_read_full_page(page, ntfs_get_block);
 }
