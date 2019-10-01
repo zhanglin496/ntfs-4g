@@ -435,6 +435,7 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 	if (!bh)
 		return -EIO;
 	memcpy(bh_result->b_data, bh->b_data, min_t(size_t, bh->b_size, bh_result->b_size));
+	map_bh(bh_result, EXNTFS_V(inode)->vol->s, block);
 	ntfs_log_debug("%s\n", __func__);
 	brelse(bh);
 	return 0;
