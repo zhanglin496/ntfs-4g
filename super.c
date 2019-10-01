@@ -484,7 +484,7 @@ ntfs_inode *ntfs_pathname_to_inode2(ntfs_volume *vol, ntfs_inode *parent,
 {
 	u64 inum;
 	int len, err = 0;
-	char *p;
+	const char *p;
 	ntfs_inode *ni;
 	struct inode *inode;
 	ntfs_inode *result = NULL;
@@ -569,7 +569,6 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *dentry,
 				unsigned int flags)
 {
 	ntfs_log_debug("%s, name=%s\n", __func__, dentry->d_name.name);
-	struct inode *inode;
 	ntfs_inode *ni = EXNTFS_I(dir);
 	ni = ntfs_pathname_to_inode2(ni->vol, ni, dentry->d_name.name);
 	ntfs_log_debug("ni=%p\n", ni);
@@ -896,7 +895,6 @@ err_out:
 static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino)
 {
 	struct inode *inode;
-	ntfs_inode *ni;
 
 	inode = iget_locked(sb, ino);
 	if (!inode)
@@ -925,9 +923,6 @@ static void print_hex(void *data, int len)
 static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	ntfs_volume *vol;
-	ntfs_inode *ni;
-	ntfs_attr_search_ctx *ctx;
-	ATTR_RECORD *a;
 	struct inode *root_inode = NULL;
 	int ret = -ENOMEM;
 
