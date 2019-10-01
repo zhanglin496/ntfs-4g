@@ -431,7 +431,7 @@ out:
 static int ntfs_get_block(struct inode *inode, sector_t block,
 		    struct buffer_head *bh_result, int create)
 {
-	struct buffer_head *bh = sb_bread(EXNTFS_V(inode)->vol->sb, block);
+	struct buffer_head *bh = sb_bread(EXNTFS_I(inode)->vol->sb, block);
 	if (!bh)
 		return -EIO;
 	memcpy(bh_result->b_data, bh->b_data, min_t(size_t, bh->b_size, bh_result->b_size));
