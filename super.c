@@ -117,7 +117,7 @@ static const struct super_operations ntfs_sops = {
 	.write_inode	= ntfs_write_inode,
 	.evict_inode	= ntfs_evict_inode,
 	.put_super	= ntfs_put_super,
-	.sync_fs	= ntfs_sync_fs,
+	.sync_fs		= ntfs_sync_fs,
 	.statfs		= ntfs_statfs,
 	.remount_fs	= ntfs_remount,
 	.show_options	= ntfs_show_options,
@@ -471,11 +471,11 @@ static sector_t ntfs_bmap(struct address_space *mapping, sector_t block)
 }
 
 static const struct address_space_operations ntfs_aops = {
-	.readpage = ntfs_readpage,
-	.writepage = ntfs_writepage,
-	.write_begin = ntfs_write_begin,
-	.write_end = generic_write_end,
-	.bmap = ntfs_bmap
+	.readpage	= ntfs_readpage,
+	.writepage	= ntfs_writepage,
+	.write_begin	= ntfs_write_begin,
+	.write_end	= generic_write_end,
+	.bmap		= ntfs_bmap
 };
 #endif
 
@@ -634,16 +634,16 @@ static int ntfs_update_time(struct inode *inode, struct timespec64 *time, int fl
 }
 
 const struct inode_operations ntfs_dir_inode_operations = {
-	.create        = __ntfs_create,
-	.lookup        = ntfs_lookup,
-	.unlink        = ntfs_unlink,
-	.symlink       = ntfs_symlink,
-	.mkdir         = ntfs_mkdir,
-	.rmdir         = ntfs_rmdir,
-	.rename        = ntfs_rename,
-	.setattr       = ntfs_setattr,
-	.getattr       = ntfs_getattr,
-	.update_time   = ntfs_update_time,
+	.create	= __ntfs_create,
+	.lookup	= ntfs_lookup,
+	.unlink	= ntfs_unlink,
+	.symlink	= ntfs_symlink,
+	.mkdir	= ntfs_mkdir,
+	.rmdir	= ntfs_rmdir,
+	.rename	= ntfs_rename,
+	.setattr	= ntfs_setattr,
+	.getattr	= ntfs_getattr,
+	.update_time	= ntfs_update_time,
 };
 
 static long ntfs_generic_ioctl(struct file *filp,
@@ -684,16 +684,16 @@ const struct file_operations ntfs_dir_operations = {
 	.llseek     = generic_file_llseek,
 	.read       = generic_read_dir,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
-	.iterate    = __ntfs_readdir,
+	.iterate	= __ntfs_readdir,
 #else
-	.readdir    = __ntfs_readdir,
+	.readdir	= __ntfs_readdir,
 #endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
-	.ioctl      = ntfs_generic_ioctl,
+	.ioctl		= ntfs_generic_ioctl,
 	.fsync      = ntfs_file_fsync,
 #else
 	.unlocked_ioctl = ntfs_generic_ioctl,
-	.fsync      = generic_file_fsync,
+	.fsync	= generic_file_fsync,
 #endif
 };
 
@@ -704,7 +704,7 @@ const struct inode_operations ntfs_file_inode_operations = {
 
 const struct file_operations ntfs_file_operations = {
 	.llseek		= generic_file_llseek,
-	.read_iter	= generic_file_read_iter,
+	.read_iter		= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
 	.mmap		= generic_file_mmap,
 	.fsync		= generic_file_fsync,
@@ -963,9 +963,9 @@ static struct dentry *ntfs_mount(struct file_system_type *fs_type,
 }
 
 static struct file_system_type ntfs_fs_type = {
-	.owner		= THIS_MODULE,
-	.name		= "ntfs-4g",
-	.mount		= ntfs_mount,
+	.owner	= THIS_MODULE,
+	.name	= "ntfs-4g",
+	.mount	= ntfs_mount,
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,
 };
