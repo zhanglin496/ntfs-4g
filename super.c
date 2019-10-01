@@ -118,7 +118,7 @@ static const struct super_operations ntfs_sops = {
 	.evict_inode	= ntfs_evict_inode,
 	.put_super	= ntfs_put_super,
 	.sync_fs	= ntfs_sync_fs,
-	.statfs		= ntfs_statfs,
+	.statfs	= ntfs_statfs,
 	.remount_fs	= ntfs_remount,
 	.show_options	= ntfs_show_options,
 };
@@ -636,17 +636,23 @@ static int ntfs_update_time(struct inode *inode, struct timespec64 *time, int fl
 	return 0;
 }
 
+static int ntfs_mknod (struct inode * dir, struct dentry *dentry, umode_t mode, dev_t rdev)
+{
+	return -EIO;
+}
+
 const struct inode_operations ntfs_dir_inode_operations = {
-	.create        = __ntfs_create,
-	.lookup        = ntfs_lookup,
-	.unlink        = ntfs_unlink,
-	.symlink       = ntfs_symlink,
-	.mkdir         = ntfs_mkdir,
-	.rmdir         = ntfs_rmdir,
-	.rename        = ntfs_rename,
-	.setattr       = ntfs_setattr,
-	.getattr       = ntfs_getattr,
-	.update_time   = ntfs_update_time,
+	.create	= __ntfs_create,
+	.lookup	= ntfs_lookup,
+	.unlink	= ntfs_unlink,
+	.symlink	= ntfs_symlink,
+	.mkdir	= ntfs_mkdir,
+	.rmdir	= ntfs_rmdir,
+	.mknod	= ntfs_mknod,
+	.rename	= ntfs_rename,
+	.setattr	= ntfs_setattr,
+	.getattr	= ntfs_getattr,
+	.update_time	= ntfs_update_time,
 };
 
 static long ntfs_generic_ioctl(struct file *filp,
@@ -707,7 +713,7 @@ const struct inode_operations ntfs_file_inode_operations = {
 
 const struct file_operations ntfs_file_operations = {
 	.llseek		= generic_file_llseek,
-	.read_iter	= generic_file_read_iter,
+	.read_iter		= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
 	.mmap		= generic_file_mmap,
 	.fsync		= generic_file_fsync,
@@ -875,7 +881,7 @@ get_size:
 				ni->allocated_size = (ni->data_size + 7) & ~7;
 			}
 			inode->i_size = ni->data_size;
-			set_nino_flag(ni,KnownSize);
+			set_nino_flag(ni, KnownSize);
 		}
 	}
 	set_nlink(inode, le16_to_cpu(ni->mrec->link_count));

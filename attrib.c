@@ -6736,7 +6736,7 @@ int ntfs_attr_data_read(ntfs_inode *ni,
 	}
 	res = total;
 exit:
-	if (IS_ERR(na))
+	if (!IS_ERR(na))
 		ntfs_attr_close(na);
 	return res;
 }
