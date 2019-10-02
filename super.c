@@ -450,9 +450,44 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 
 static int ntfs_readpage(struct file *file, struct page *page)
 {
-//	return -EIO;
+	struct inode *vi;
+	u8 *addr;
+	ntfs_inode *ni;
+	u32 attr_len;
+	int err;
+	vi = page->mapping->host;
+	ni = EXNTFS_I(vi);
+	ntfs_attr_search_ctx *ctx;
 
-	return block_read_full_page(page, ntfs_get_block);
+	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	if (unlikely(!ctx)) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx);
+	if (unlikely(err))
+		goto out;
+
+	ntfs_log_debug("%s len=%u %d %llu type=%u, flags=%u\n", __func__, le32_to_cpu(ctx->attr->value_length), ctx->attr->non_resident, 
+				sle64_to_cpu(ctx->attr->data_size), ctx->attr->type, ctx->attr->flags);
+
+	addr = kmap_atomic(page);
+	if (ctx->attr->non_resident) {
+		ntfs_log_debug("total=%lld\n", ntfs_get_data(ni->vol, ctx->attr, addr, PAGE_SIZE));
+	} else {
+		memcpy(addr, (u8*)ctx->attr + le16_to_cpu(ctx->attr->value_offset), le32_to_cpu(ctx->attr->value_length));
+	}
+	flush_dcache_page(page);
+	kunmap_atomic(addr);
+	SetPageUptodate(page);
+	err = 0;
+out:
+	ntfs_attr_put_search_ctx(ctx);
+	unlock_page(page);
+	return err;
+//	return block_read_full_page(page, ntfs_get_block);
 }
 
 static int ntfs_write_begin(struct file *file, struct address_space *mapping,
