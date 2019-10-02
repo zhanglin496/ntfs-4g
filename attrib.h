@@ -399,5 +399,8 @@ extern int ntfs_attr_data_write(ntfs_inode *ni,
 extern int ntfs_attr_shrink_size(ntfs_inode *ni, ntfschar *stream_name,
 		int stream_name_len, off_t offset);
 
+s64 ntfs_get_data(const ntfs_volume *vol,
+		const ATTR_RECORD *a, void *b, size_t size);
+
 #endif /* defined _NTFS_ATTRIB_H */
 
