@@ -443,9 +443,49 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 {
-	return -EIO;
+	struct inode *vi;
+	ntfs_volume *vol;
+	ntfs_inode *ni;
+	ATTR_RECORD *a;
+	ntfs_attr_search_ctx *ctx;
+	struct buffer_head *bh, *head;
+	ntfs_attr *na;
+	sector_t iblock, lblock;
+	unsigned long blocksize;
+	unsigned char blocksize_bits;
+	int err = 0;
+	runlist *rl = NULL;
+	vi = page->mapping->host;
+	ni = EXNTFS_I(vi);
+	vol = ni->vol;
+	blocksize = vol->sb->s_blocksize;
+	blocksize_bits = vol->sb->s_blocksize_bits;
 
-	return block_write_full_page(page, ntfs_get_block, wbc);
+	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	if (unlikely(!ctx)) {
+		err = -ENOMEM;
+		goto err_out;
+	}
+	err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx);
+	if (unlikely(err))
+		goto err_out;
+
+	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
+	if (IS_ERR(na)) {
+		err = PTR_ERR(na);
+		goto err_out;
+	}
+	iblock = (s64)page->index << (PAGE_SHIFT - blocksize_bits);
+//	ntfs_attr_pwrite(na, );
+	ntfs_attr_close(na);
+
+err_out:
+	err = -EIO;
+	ntfs_attr_put_search_ctx(ctx);
+	unlock_page(page);
+	return err;
+//	return block_write_full_page(page, ntfs_get_block, wbc);
 }
 
 static int ntfs_readpage(struct file *file, struct page *page)
@@ -453,10 +493,10 @@ static int ntfs_readpage(struct file *file, struct page *page)
 	int i;	
 	s64 r, len, pos;
 	void *addr;
-	ntfs_inode *ni;
 	loff_t i_size;
-	ntfs_volume *vol;
 	struct inode *vi;
+	ntfs_volume *vol;
+	ntfs_inode *ni;
 	ATTR_RECORD *a;
 	ntfs_attr_search_ctx *ctx;
 	struct buffer_head *bh, *head;
@@ -519,6 +559,7 @@ static int ntfs_readpage(struct file *file, struct page *page)
 		memcpy(addr, (const char*)a + le16_to_cpu(a->value_offset),
 				min_t(size_t, PAGE_SIZE, le32_to_cpu(a->value_length)));
 		kunmap_atomic(addr);
+		flush_dcache_page(page);
 		goto done;
 	}
 
