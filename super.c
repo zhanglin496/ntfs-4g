@@ -448,6 +448,260 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 	return block_write_full_page(page, ntfs_get_block, wbc);
 }
 
+static int ntfs_readpage(struct file *file, struct page *page)
+{
+	int i;	
+	s64 total, r, len, pos;
+	void *addr;
+	ntfs_inode *ni;
+	u32 attr_len;
+	loff_t i_size;
+	ntfs_volume *vol;
+	struct inode *vi;
+	ATTR_RECORD *a;
+	ntfs_attr_search_ctx *ctx;
+	struct buffer_head *bh, *head;
+	sector_t iblock, lblock;
+	unsigned long blocksize;
+	unsigned char blocksize_bits;
+	int err = 0;
+	runlist *rl = NULL;
+	vi = page->mapping->host;
+	ni = EXNTFS_I(vi);
+	vol = ni->vol;
+
+	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	if (unlikely(!ctx)) {
+		err = -ENOMEM;
+		goto err_out;
+	}
+	err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx);
+	if (unlikely(err))
+		goto err_out;
+	
+	a = ctx->attr;
+	i_size = i_size_read(vi);
+	/* Is the page fully outside i_size? (truncate in progress) */
+	if (unlikely(page->index >= (i_size + PAGE_SIZE - 1) >>
+			PAGE_SHIFT)) {
+		zero_user(page, 0, PAGE_SIZE);
+		goto done;
+	}
+	/*
+	 * This can potentially happen because we clear PageUptodate() during
+	 * ntfs_writepage() of MstProtected() attributes.
+	 */
+	if (PageUptodate(page))
+		goto err_out;
+
+	/* Complex attribute? */
+	/*
+	 * Ignore the flags in case they are not zero for an attribute list
+	 * attribute.  Windows does not complain about invalid flags and chkdsk
+	 * does not detect or fix them so we need to cope with it, too.
+	 */
+	if (a->type != AT_ATTRIBUTE_LIST && a->flags) {
+		ntfs_log_error("Non-zero (%04x) attribute flags. Cannot handle "
+			       "this yet.\n", le16_to_cpu(a->flags));
+		err = -EOPNOTSUPP;
+		goto err_out;
+	}
+
+	if (!a->non_resident) {
+		/* Attribute is resident. */
+		ntfs_log_debug("non_resident=%d\n", a->non_resident);
+		/* Sanity check. */
+		if (le32_to_cpu(a->value_length) + le16_to_cpu(a->value_offset)
+				> le32_to_cpu(a->length)) {
+			goto done;
+		}
+		addr = kmap_atomic(page);
+		memcpy(addr, (const char*)a + le16_to_cpu(a->value_offset),
+				min_t(size_t, PAGE_SIZE, le32_to_cpu(a->value_length)));
+		kunmap_atomic(addr);
+		goto done;
+	}
+
+	/* Attribute is not resident. */
+
+	/* If no data, return 0. */
+	if (!(a->data_size)) {
+		goto done;
+	}
+
+	blocksize = vol->sb->s_blocksize;
+	blocksize_bits = vol->sb->s_blocksize_bits;
+
+	if (!page_has_buffers(page)) {
+		create_empty_buffers(page, blocksize, 0);
+		if (unlikely(!page_has_buffers(page))) {
+			err = -ENOMEM;
+			goto err_out;
+		}
+	}
+	bh = head = page_buffers(page);
+	/*
+	 * FIXME: What about attribute lists?!? (AIA)
+	 */
+	/* Decompress the mapping pairs array into a runlist. */
+	rl = ntfs_mapping_pairs_decompress(vol, a, NULL);
+	if (!rl) {
+		err = -EINVAL;
+		goto err_out;
+	}
+	/*
+	 * FIXED: We were overflowing here in a nasty fashion when we
+	 * reach the last cluster in the runlist as the buffer will
+	 * only be big enough to hold data_size bytes while we are
+	 * reading in allocated_size bytes which is usually larger
+	 * than data_size, since the actual data is unlikely to have a
+	 * size equal to a multiple of the cluster size!
+	 * FIXED2:  We were also overflowing here in the same fashion
+	 * when the data_size was more than one run smaller than the
+	 * allocated size which happens with Windows XP sometimes.
+	 */
+	/* Now load all clusters in the runlist into b. */
+	//算出要读第几个块
+	
+	iblock = (s64)page->index << (PAGE_SHIFT - blocksize_bits);
+	i = 0, total = 0, lblock = 0;
+	if (!rl[i].length)
+		goto done;
+	do {
+		len = rl[i].length << vol->cluster_size_bits;
+		lblock += len >> blocksize_bits;
+		ntfs_log_debug("iblock=%llu, lblock=%llu\n", iblock, lblock);
+		if (iblock >= lblock)
+			continue;
+		while (len > 0) {
+			pos = (rl[i].lcn << vol->cluster_size_bits) + (iblock << blocksize_bits);
+			ntfs_log_debug("pos=%lld, iblock=%llu\n", pos, iblock);
+			r = ntfs_pread(vol->sb, pos, min(bh->b_size, len), bh->b_data);
+			if (r != min(bh->b_size, len)) {
+				if (r != min(bh->b_size, len)) {
+#define ESTR "Error reading attribute value"
+					if (r == -1)
+						ntfs_log_perror(ESTR);
+					else if (r < len) {
+						ntfs_log_debug(ESTR ": Ran out of input data.\n");
+					} else {
+						ntfs_log_debug(ESTR ": unknown error\n");
+					}
+#undef ESTR
+					err = -EIO;
+					goto err_out;
+				}
+			}
+			map_bh(bh, vol->sb, rl[i].lcn + iblock);
+			total += r;
+			iblock++;
+			bh = bh->b_this_page;
+			len -= r;
+			if (bh == head)
+				break;
+		}
+	} while (++i && rl[i].length && bh != head);
+#if 0
+		if (total + len >= sle64_to_cpu(a->data_size)) {
+//			unsigned char *intbuf = NULL;
+			/*
+			 * We have reached the last run so we were going to
+			 * overflow when executing the ntfs_pread() which is
+			 * BAAAAAAAD!
+			 * Temporary fix:
+			 *	Allocate a new buffer with size:
+			 *	rl[i].length << vol->cluster_size_bits, do the
+			 *	read into our buffer, then memcpy the correct
+			 *	amount of data into the caller supplied buffer,
+			 *	free our buffer, and continue.
+			 * We have reached the end of data size so we were
+			 * going to overflow in the same fashion.
+			 * Temporary fix:  same as above.
+			 */
+//			intbuf = ntfs_malloc(rl[i].length << vol->cluster_size_bits);
+//			if (!intbuf) {
+//				free(rl);
+//				return 0;
+//			}
+			/*
+			 * FIXME: If compressed file: Only read if lcn != -1.
+			 * Otherwise, we are dealing with a sparse run and we
+			 * just memset the user buffer to 0 for the length of
+			 * the run, which should be 16 (= compression unit
+			 * size).
+			 * FIXME: Really only when file is compressed, or can
+			 * we have sparse runs in uncompressed files as well?
+			 * - Yes we can, in sparse files! But not necessarily
+			 * size of 16, just run length.
+			 */
+			r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
+							min(size - total, len), addr + total);
+			if (r != min(size - total, len)) {
+#define ESTR "Error reading attribute value"
+				if (r == -1)
+					ntfs_log_perror(ESTR);
+				else if (r < len) {
+					ntfs_log_debug(ESTR ": Ran out of input data.\n");
+//					errno = EIO;
+				} else {
+					ntfs_log_debug(ESTR ": unknown error\n");
+//					errno = EIO;
+				}
+#undef ESTR
+				kfree(rl);
+//				kfree(intbuf);
+				return -EIO;
+			}
+//			memcpy(b + total, intbuf, sle64_to_cpu(a->data_size) -
+//					total);
+//			free(intbuf);
+//			total = sle64_to_cpu(a->data_size);
+			total += r;
+			break;
+		}
+		/*
+		 * FIXME: If compressed file: Only read if lcn != -1.
+		 * Otherwise, we are dealing with a sparse run and we just
+		 * memset the user buffer to 0 for the length of the run, which
+		 * should be 16 (= compression unit size).
+		 * FIXME: Really only when file is compressed, or can
+		 * we have sparse runs in uncompressed files as well?
+		 * - Yes we can, in sparse files! But not necessarily size of
+		 * 16, just run length.
+		 */
+		r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
+				min(size - total, len), addr + total);
+		if (r != len) {
+#define ESTR "Error reading attribute value"
+			if (r == -1)
+				ntfs_log_perror(ESTR);
+			else if (r < len) {
+				ntfs_log_debug(ESTR ": Ran out of input data.\n");
+//				errno = EIO;
+			} else {
+				ntfs_log_debug(ESTR ": unknown error\n");
+//				errno = EIO;
+			}
+#undef ESTR
+//			kfree(rl);
+//			return -EIO;
+			err = -EIO;
+			goto done;
+		}
+	}
+#endif
+
+
+done:
+	SetPageUptodate(page);
+err_out:
+	ntfs_attr_put_search_ctx(ctx);
+	unlock_page(page);
+	kfree(rl);
+	return err;
+}
+
 #if 0
 static int ntfs_readpage(struct file *file, struct page *page)
 {

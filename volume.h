@@ -174,7 +174,7 @@ struct _ntfs_volume {
 	union {
 		struct ntfs_device *dev;	/* NTFS device associated with
 						   the volume. */
-		void *sb;	/* For kernel porting compatibility. */
+		struct super_block *sb;	/* For kernel porting compatibility. */
 	};
 	char *vol_name;		/* Name of the volume. */
 	unsigned long state;	/* NTFS specific flags describing this volume.
