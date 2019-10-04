@@ -255,17 +255,17 @@ s64 ntfs_pread(struct super_block *sb, const s64 pos, s64 count, void *b)
 		return -EINVAL;
 	if (!count)
 		return 0;
-	sector = pos / NTFS_BLOCK_SIZE;
+	sector = pos / sb->s_blocksize;
 	for (total = 0; count; count -= br, total += br) {
 		ntfs_log_trace("read sector %lld\n", sector);
 		bh = sb_bread(sb, sector);
 		if (!bh)
 			break;
 		br = bh->b_size;
-		sector += br / NTFS_BLOCK_SIZE;
+		sector += br / sb->s_blocksize;
 		if (br > count)
 			br = count;
-		memcpy(b + total, bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE), br);
+		memcpy(b + total, bh->b_data + (total ? 0 : pos % sb->s_blocksize), br);
 		brelse(bh);
 	}
 	ntfs_log_trace("ntfs_pread %lld bytes\n", total);
@@ -361,18 +361,18 @@ s64 ntfs_pwrite(struct ntfs_device *dev, const s64 pos, s64 count,
 		goto out;
 	}
 
-	sector = pos / NTFS_BLOCK_SIZE;
+	sector = pos / sb->s_blocksize;
 	for (total = 0; count; count -= br, total += br) {
 		bh = sb_bread(sb, sector);
 		if (!bh)
 			break;
 		br = bh->b_size;
-		sector += br / NTFS_BLOCK_SIZE;
+		sector += br / sb->s_blocksize;
 		if (!total)
-			br -= pos % NTFS_BLOCK_SIZE;
+			br -= pos % sb->s_blocksize;
 		if (br > count)
 			br = count;
-		memcpy(bh->b_data + (total ? 0 : pos % NTFS_BLOCK_SIZE), b + total, br);
+		memcpy(bh->b_data + (total ? 0 : pos % sb->s_blocksize), b + total, br);
 		mark_buffer_dirty(bh);
 		brelse(bh);
 	}

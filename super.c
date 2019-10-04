@@ -1136,7 +1136,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 	struct inode *root_inode = NULL;
 	int ret = -ENOMEM;
 
-	sb_set_blocksize(sb, NTFS_BLOCK_SIZE);
+	sb_set_blocksize(sb, PAGE_SIZE);
 	vol = ntfs_device_mount(sb, 0);
 	if (!vol)
 		goto error_exit;
