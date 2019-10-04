@@ -443,6 +443,7 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 {
+	int i;
 	struct inode *vi;
 	ntfs_volume *vol;
 	ntfs_inode *ni;
@@ -470,7 +471,14 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (unlikely(err))
 		goto err_out;
-
+	rl = ntfs_mapping_pairs_decompress(vol, a, NULL);
+	if (!rl) {
+		err = -EINVAL;
+		goto err_out;
+	}
+	for (i = 0; rl[i].length; i++)
+		ntfs_log_debug("%lld\n", rl[i].lcn);
+	ntfs_log_debug("");
 	na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
 	if (IS_ERR(na)) {
 		err = PTR_ERR(na);
@@ -484,6 +492,7 @@ err_out:
 	err = -EIO;
 	ntfs_attr_put_search_ctx(ctx);
 	unlock_page(page);
+	kfree(rl);
 	return err;
 //	return block_write_full_page(page, ntfs_get_block, wbc);
 }
@@ -491,7 +500,7 @@ err_out:
 static int ntfs_readpage(struct file *file, struct page *page)
 {
 	int i;	
-	s64 r, len, pos;
+	s64 r, len, pos, start;
 	void *addr;
 	loff_t i_size;
 	struct inode *vi;
@@ -611,25 +620,23 @@ static int ntfs_readpage(struct file *file, struct page *page)
 		ntfs_log_debug("iblock=%llu, lblock=%llu\n", iblock, lblock);
 		if (iblock >= lblock)
 			continue;
-		pos = rl[i].lcn << vol->cluster_size_bits;
+		start = rl[i].lcn << vol->cluster_size_bits;
 		while (len > 0) {
-			pos += iblock << blocksize_bits;
+			pos = start + (iblock << blocksize_bits);
 			ntfs_log_debug("pos=%lld, iblock=%llu\n", pos, iblock);
 			r = ntfs_pread(vol->sb, pos, min(bh->b_size, len), bh->b_data);
 			if (r != min(bh->b_size, len)) {
-				if (r != min(bh->b_size, len)) {
-					#define ESTR "Error reading attribute value"
-					if (r == -1)
-						ntfs_log_perror(ESTR);
-					else if (r < len) {
-						ntfs_log_debug(ESTR ": Ran out of input data.\n");
-					} else {
-						ntfs_log_debug(ESTR ": unknown error\n");
-					}
-					#undef ESTR
-					err = -EIO;
-					goto err_out;
+				#define ESTR "Error reading attribute value"
+				if (r == -1) {
+					ntfs_log_perror(ESTR);
+				} else if (r < len) {
+					ntfs_log_debug(ESTR ": Ran out of input data.\n");
+				} else {
+					ntfs_log_debug(ESTR ": unknown error\n");
 				}
+				#undef ESTR
+				err = -EIO;
+				goto err_out;
 			}
 			map_bh(bh, vol->sb, rl[i].lcn + iblock);
 			iblock++;
@@ -654,6 +661,7 @@ static int ntfs_write_begin(struct file *file, struct address_space *mapping,
 			struct page **pagep, void **fsdata)
 {
 	int ret;
+	ntfs_log_debug("");
 	return -EIO;
 
 	ret = block_write_begin(mapping, pos, len, flags, pagep,
@@ -666,6 +674,7 @@ static int ntfs_write_begin(struct file *file, struct address_space *mapping,
 
 static sector_t ntfs_bmap(struct address_space *mapping, sector_t block)
 {
+	ntfs_log_debug("");
 	return -EIO;
 
 	return generic_block_bmap(mapping, block, ntfs_get_block);
@@ -835,13 +844,13 @@ static int ntfs_update_time(struct inode *inode, struct timespec64 *time, int fl
 }
 
 const struct inode_operations ntfs_dir_inode_operations = {
-	.create	= __ntfs_create,
-	.lookup	= ntfs_lookup,
-	.unlink	= ntfs_unlink,
+	.create		= __ntfs_create,
+	.lookup		= ntfs_lookup,
+	.unlink		= ntfs_unlink,
 	.symlink	= ntfs_symlink,
-	.mkdir	= ntfs_mkdir,
-	.rmdir	= ntfs_rmdir,
-	.rename	= ntfs_rename,
+	.mkdir		= ntfs_mkdir,
+	.rmdir		= ntfs_rmdir,
+	.rename		= ntfs_rename,
 	.setattr	= ntfs_setattr,
 	.getattr	= ntfs_getattr,
 	.update_time	= ntfs_update_time,
@@ -882,8 +891,8 @@ static int __ntfs_readdir(struct file *filp, struct dir_context *ctx)
 }
 
 const struct file_operations ntfs_dir_operations = {
-	.llseek     = generic_file_llseek,
-	.read       = generic_read_dir,
+	.llseek		= generic_file_llseek,
+	.read		= generic_read_dir,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
 	.iterate	= __ntfs_readdir,
 #else
@@ -891,7 +900,7 @@ const struct file_operations ntfs_dir_operations = {
 #endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 	.ioctl		= ntfs_generic_ioctl,
-	.fsync      = ntfs_file_fsync,
+	.fsync      	= ntfs_file_fsync,
 #else
 	.unlocked_ioctl = ntfs_generic_ioctl,
 	.fsync	= generic_file_fsync,
@@ -905,7 +914,7 @@ const struct inode_operations ntfs_file_inode_operations = {
 
 const struct file_operations ntfs_file_operations = {
 	.llseek		= generic_file_llseek,
-	.read_iter		= generic_file_read_iter,
+	.read_iter	= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
 	.mmap		= generic_file_mmap,
 	.fsync		= generic_file_fsync,
