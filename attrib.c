@@ -308,18 +308,52 @@ s64 ntfs_get_attribute_value(const ntfs_volume *vol,
 	return total;
 }
 
-s64 ntfs_get_data(const ntfs_volume *vol,
-		const ATTR_RECORD *a, void *b, size_t size)
+int ntfs_readpage(struct file *file, struct page *page)
 {
-	runlist *rl;
+	int i;	
 	s64 total, r, len;
-	int i;
+	void *addr;
+	ntfs_inode *ni;
+	u32 attr_len;
+	loff_t i_size;
+	ntfs_volume *vol;
+	struct inode *vi;
+	ATTR_RECORD *a;
+	ntfs_attr_search_ctx *ctx;
+	struct buffer_head *bh, *head;
+	sector_t iblock, lblock;
+	unsigned long blocksize;
+	unsigned char blocksize_bits;
+	int err = 0;
+	runlist *rl = NULL;
+	vi = page->mapping->host;
+	ni = EXNTFS_I(vi);
+	vol = ni->vol;
 
-	/* Sanity checks. */
-	if (!vol || !a || !b) {
-//		errno = EINVAL;
-		return -EINVAL;
+	ctx = ntfs_attr_get_search_ctx(ni, NULL);
+	if (unlikely(!ctx)) {
+		err = -ENOMEM;
+		goto err_out;
 	}
+	err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0,
+			CASE_SENSITIVE, 0, NULL, 0, ctx);
+	if (unlikely(err))
+		goto err_out;
+	a = ctx->attr;
+	i_size = i_size_read(vi);
+	/* Is the page fully outside i_size? (truncate in progress) */
+	if (unlikely(page->index >= (i_size + PAGE_SIZE - 1) >>
+			PAGE_SHIFT)) {
+		zero_user(page, 0, PAGE_SIZE);
+		goto done;
+	}
+	/*
+	 * This can potentially happen because we clear PageUptodate() during
+	 * ntfs_writepage() of MstProtected() attributes.
+	 */
+	if (PageUptodate(page))
+		goto err_out;
+
 	/* Complex attribute? */
 	/*
 	 * Ignore the flags in case they are not zero for an attribute list
@@ -329,39 +363,51 @@ s64 ntfs_get_data(const ntfs_volume *vol,
 	if (a->type != AT_ATTRIBUTE_LIST && a->flags) {
 		ntfs_log_error("Non-zero (%04x) attribute flags. Cannot handle "
 			       "this yet.\n", le16_to_cpu(a->flags));
-//		errno = EOPNOTSUPP;
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		goto err_out;
 	}
+
 	if (!a->non_resident) {
 		/* Attribute is resident. */
 
 		/* Sanity check. */
 		if (le32_to_cpu(a->value_length) + le16_to_cpu(a->value_offset)
 				> le32_to_cpu(a->length)) {
-			return 0;
+			goto done;
 		}
-
-		memcpy(b, (const char*)a + le16_to_cpu(a->value_offset),
-				min_t(size_t, size, le32_to_cpu(a->value_length)));
-//		errno = 0;
-		return (s64)le32_to_cpu(a->value_length);
+		addr = kmap_atomic(page);
+		memcpy(addr, (const char*)a + le16_to_cpu(a->value_offset),
+				min_t(size_t, PAGE_SIZE, le32_to_cpu(a->value_length)));
+		kunmap_atomic(page);
+		goto done;
 	}
 
 	/* Attribute is not resident. */
 
 	/* If no data, return 0. */
 	if (!(a->data_size)) {
-//		errno = 0;
-		return 0;
+		goto done;
 	}
+
+	blocksize = vol->sb->s_blocksize;
+	blocksize_bits = vol->sb->s_blocksize_bits;
+
+	if (!page_has_buffers(page)) {
+		create_empty_buffers(page, blocksize, 0);
+		if (unlikely(!page_has_buffers(page))) {
+			err = -ENOMEM;
+			goto err_out;
+		}
+	}
+	bh = head = page_buffers(page);
 	/*
 	 * FIXME: What about attribute lists?!? (AIA)
 	 */
 	/* Decompress the mapping pairs array into a runlist. */
 	rl = ntfs_mapping_pairs_decompress(vol, a, NULL);
 	if (!rl) {
-//		errno = EINVAL;
-		return -EINVAL;
+		err = -EINVAL;
+		goto err_out;
 	}
 	/*
 	 * FIXED: We were overflowing here in a nasty fashion when we
@@ -375,11 +421,43 @@ s64 ntfs_get_data(const ntfs_volume *vol,
 	 * allocated size which happens with Windows XP sometimes.
 	 */
 	/* Now load all clusters in the runlist into b. */
-	for (i = 0, total = 0; rl[i].length && total < size; i++) {
+	//算出要读第几个块
+	iblock = (s64)page->index << (PAGE_SHIFT - blocksize_bits);
+	for (i = 0, total = 0, lblock = 0; rl[i].length && bh != head; i++) {
 		len = rl[i].length << vol->cluster_size_bits;
-		if (total + len >=
-				sle64_to_cpu(a->data_size)) {
-			unsigned char *intbuf = NULL;
+		lblock += len >> blocksize_bits;
+		if (iblock >= lblock)
+			continue;
+		while (len > 0) {
+			r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits +
+						(iblock << blocksize_bits), min(bh->b_size, len), bh->b_data);
+			if (r != min(bh->b_size, len)) {
+				if (r != min(bh->b_size, len)) {
+#define ESTR "Error reading attribute value"
+					if (r == -1)
+						ntfs_log_perror(ESTR);
+					else if (r < len) {
+						ntfs_log_debug(ESTR ": Ran out of input data.\n");
+					} else {
+						ntfs_log_debug(ESTR ": unknown error\n");
+					}
+#undef ESTR
+					err = -EIO;
+					goto err_out;
+				}
+			}
+			map_bh(bh, vol->sb, rl[i].lcn + iblock);
+			total += r;
+			iblock++;
+			bh = bh->b_this_page;
+			len -= r;
+			if (bh == head)
+				break;
+		}
+	}
+#if 0
+		if (total + len >= sle64_to_cpu(a->data_size)) {
+//			unsigned char *intbuf = NULL;
 			/*
 			 * We have reached the last run so we were going to
 			 * overflow when executing the ntfs_pread() which is
@@ -410,8 +488,8 @@ s64 ntfs_get_data(const ntfs_volume *vol,
 			 * - Yes we can, in sparse files! But not necessarily
 			 * size of 16, just run length.
 			 */
-			r = ntfs_pread(vol->sb, rl[i].lcn <<
-					vol->cluster_size_bits, min(size - total, len), b + total);
+			r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
+							min(size - total, len), addr + total);
 			if (r != min(size - total, len)) {
 #define ESTR "Error reading attribute value"
 				if (r == -1)
@@ -446,8 +524,7 @@ s64 ntfs_get_data(const ntfs_volume *vol,
 		 * 16, just run length.
 		 */
 		r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
-				min(size - total, len),
-				b + total);
+				min(size - total, len), addr + total);
 		if (r != len) {
 #define ESTR "Error reading attribute value"
 			if (r == -1)
@@ -460,13 +537,22 @@ s64 ntfs_get_data(const ntfs_volume *vol,
 //				errno = EIO;
 			}
 #undef ESTR
-			kfree(rl);
-			return -EIO;
+//			kfree(rl);
+//			return -EIO;
+			err = -EIO;
+			goto done;
 		}
-		total += r;
 	}
+#endif
+
+
+done:
+	SetPageUptodate(page);
+err_out:
+	ntfs_attr_put_search_ctx(ctx);
+	unlock_page(page);
 	kfree(rl);
-	return total;
+	return err;
 }
 
 

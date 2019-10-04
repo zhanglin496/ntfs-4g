@@ -448,6 +448,7 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 	return block_write_full_page(page, ntfs_get_block, wbc);
 }
 
+#if 0
 static int ntfs_readpage(struct file *file, struct page *page)
 {
 	struct inode *vi;
@@ -489,6 +490,7 @@ out:
 	return err;
 //	return block_read_full_page(page, ntfs_get_block);
 }
+#endif
 
 static int ntfs_write_begin(struct file *file, struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned flags,
