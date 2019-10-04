@@ -33,6 +33,7 @@ typedef struct _ntfs_inode ntfs_inode;
 #include "support.h"
 #include "volume.h"
 #include "ntfstime.h"
+#include "runlist.h"
 
 /**
  * enum ntfs_inode_state_bits -
@@ -106,6 +107,8 @@ typedef enum {
 struct _ntfs_inode {
 	u64 mft_no;		/* Inode / mft record number. */
 	MFT_RECORD *mrec;	/* The actual mft record of the inode. */
+	ATTR_RECORD *a;
+	runlist *rl;
 	ntfs_volume *vol;	/* Pointer to the ntfs volume of this inode. */
 	unsigned long state;	/* NTFS specific flags describing this inode.
 				   See ntfs_inode_state_bits above. */

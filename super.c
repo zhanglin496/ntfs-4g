@@ -431,14 +431,22 @@ out:
 static int ntfs_get_block(struct inode *inode, sector_t block,
 		    struct buffer_head *bh_result, int create)
 {
-	struct buffer_head *bh = sb_bread(EXNTFS_I(inode)->vol->sb, block);
-	if (!bh)
-		return -EIO;
-	memcpy(bh_result->b_data, bh->b_data, min_t(size_t, bh->b_size, bh_result->b_size));
-	map_bh(bh_result, EXNTFS_I(inode)->vol->sb, block);
-	ntfs_log_debug("%s\n", __func__);
-	brelse(bh);
-	return 0;
+	int i;
+	s64 len;
+	sector_t lblock = 0;
+	ntfs_inode *ni = EXNTFS_I(inode);
+	runlist *rl = ni->rl;
+	ntfs_volume *vol = ni->vol;
+
+	for (i = 0; rl[i].length; i++) {
+		len = rl[i].length << vol->cluster_size_bits;
+		lblock += len >> vol->sb->s_blocksize_bits;
+		if (block >= lblock)
+			continue;
+		map_bh(bh_result, vol->sb, rl[i].lcn + block);
+		return 0;
+	}
+	return -ERANGE;
 }
 
 static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
@@ -500,7 +508,6 @@ err_out:
 static int ntfs_readpage(struct file *file, struct page *page)
 {
 	int i;	
-	s64 r, len, pos, start;
 	void *addr;
 	loff_t i_size;
 	struct inode *vi;
@@ -508,10 +515,6 @@ static int ntfs_readpage(struct file *file, struct page *page)
 	ntfs_inode *ni;
 	ATTR_RECORD *a;
 	ntfs_attr_search_ctx *ctx;
-	struct buffer_head *bh, *head;
-	sector_t iblock, lblock;
-	unsigned long blocksize;
-	unsigned char blocksize_bits;
 	int err = 0;
 	runlist *rl = NULL;
 	vi = page->mapping->host;
@@ -577,17 +580,6 @@ static int ntfs_readpage(struct file *file, struct page *page)
 	if (!a->data_size)
 		goto done;
 
-	blocksize = vol->sb->s_blocksize;
-	blocksize_bits = vol->sb->s_blocksize_bits;
-
-	if (!page_has_buffers(page)) {
-		create_empty_buffers(page, blocksize, 0);
-		if (unlikely(!page_has_buffers(page))) {
-			err = -ENOMEM;
-			goto err_out;
-		}
-	}
-	bh = head = page_buffers(page);
 	/*
 	 * FIXME: What about attribute lists?!? (AIA)
 	 */
@@ -597,55 +589,11 @@ static int ntfs_readpage(struct file *file, struct page *page)
 		err = -EINVAL;
 		goto err_out;
 	}
-	/*
-	 * FIXED: We were overflowing here in a nasty fashion when we
-	 * reach the last cluster in the runlist as the buffer will
-	 * only be big enough to hold data_size bytes while we are
-	 * reading in allocated_size bytes which is usually larger
-	 * than data_size, since the actual data is unlikely to have a
-	 * size equal to a multiple of the cluster size!
-	 * FIXED2:  We were also overflowing here in the same fashion
-	 * when the data_size was more than one run smaller than the
-	 * allocated size which happens with Windows XP sometimes.
-	 */
-	/* Now load all clusters in the runlist into b. */	
-	iblock = (s64)page->index << (PAGE_SHIFT - blocksize_bits);
-	i = 0; lblock = 0;	
-	if (!rl[i].length)
-		goto err_out;
-
-	do {
-		len = rl[i].length << vol->cluster_size_bits;
-		lblock += len >> blocksize_bits;
-		ntfs_log_debug("iblock=%llu, lblock=%llu\n", iblock, lblock);
-		if (iblock >= lblock)
-			continue;
-		start = rl[i].lcn << vol->cluster_size_bits;
-		while (len > 0) {
-			pos = start + (iblock << blocksize_bits);
-			ntfs_log_debug("pos=%lld, iblock=%llu\n", pos, iblock);
-			r = ntfs_pread(vol->sb, pos, min(bh->b_size, len), bh->b_data);
-			if (r != min(bh->b_size, len)) {
-				#define ESTR "Error reading attribute value"
-				if (r == -1) {
-					ntfs_log_perror(ESTR);
-				} else if (r < len) {
-					ntfs_log_debug(ESTR ": Ran out of input data.\n");
-				} else {
-					ntfs_log_debug(ESTR ": unknown error\n");
-				}
-				#undef ESTR
-				err = -EIO;
-				goto err_out;
-			}
-			map_bh(bh, vol->sb, rl[i].lcn + iblock);
-			iblock++;
-			bh = bh->b_this_page;
-			len -= r;
-			if (bh == head)
-				break;
-		}
-	} while (rl[++i].length && bh != head);
+	ni->rl = rl;
+	err = block_read_full_page(page, ntfs_get_block);
+	ntfs_attr_put_search_ctx(ctx);
+	kfree(rl);
+	return err;
 
 done:
 	SetPageUptodate(page);
