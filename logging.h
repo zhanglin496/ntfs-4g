@@ -55,6 +55,20 @@
 #define NTFS_LOG_FLAG_FUNCTION	(1 << 3) /* Show the function name containing the message */
 #define NTFS_LOG_FLAG_ONLYNAME	(1 << 4) /* Only display the filename, not the pathname */
 
+
+enum log_level {
+	LOG_DEBUG,
+	LOG_TRACE,
+	LOG_LEAVE,
+	LOG_CRITICAL,
+	LOG_ERROR,
+	LOG_INFO,
+	LOG_PERROR,
+	LOG_PROGRESS,
+	LOG_VERBOSE,
+	LOG_WARNING,
+};
+
 #define DEBUG
 
 #define ntfs_fmt(fmt)  "[%s %d]"": " fmt, __func__, __LINE__
