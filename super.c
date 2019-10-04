@@ -451,10 +451,9 @@ static int ntfs_writepage(struct page *page, struct writeback_control *wbc)
 static int ntfs_readpage(struct file *file, struct page *page)
 {
 	int i;	
-	s64 total, r, len, pos;
+	s64 r, len, pos;
 	void *addr;
 	ntfs_inode *ni;
-	u32 attr_len;
 	loff_t i_size;
 	ntfs_volume *vol;
 	struct inode *vi;
@@ -524,11 +523,9 @@ static int ntfs_readpage(struct file *file, struct page *page)
 	}
 
 	/* Attribute is not resident. */
-
 	/* If no data, return 0. */
-	if (!(a->data_size)) {
+	if (!a->data_size)
 		goto done;
-	}
 
 	blocksize = vol->sb->s_blocksize;
 	blocksize_bits = vol->sb->s_blocksize_bits;
@@ -561,26 +558,26 @@ static int ntfs_readpage(struct file *file, struct page *page)
 	 * when the data_size was more than one run smaller than the
 	 * allocated size which happens with Windows XP sometimes.
 	 */
-	/* Now load all clusters in the runlist into b. */
-	//算出要读第几个块
-	
+	/* Now load all clusters in the runlist into b. */	
 	iblock = (s64)page->index << (PAGE_SHIFT - blocksize_bits);
-	i = 0, total = 0, lblock = 0;
+	i = 0; lblock = 0;	
 	if (!rl[i].length)
-		goto done;
+		goto err_out;
+
 	do {
 		len = rl[i].length << vol->cluster_size_bits;
 		lblock += len >> blocksize_bits;
 		ntfs_log_debug("iblock=%llu, lblock=%llu\n", iblock, lblock);
 		if (iblock >= lblock)
 			continue;
+		pos = rl[i].lcn << vol->cluster_size_bits;
 		while (len > 0) {
-			pos = (rl[i].lcn << vol->cluster_size_bits) + (iblock << blocksize_bits);
+			pos += iblock << blocksize_bits;
 			ntfs_log_debug("pos=%lld, iblock=%llu\n", pos, iblock);
 			r = ntfs_pread(vol->sb, pos, min(bh->b_size, len), bh->b_data);
 			if (r != min(bh->b_size, len)) {
 				if (r != min(bh->b_size, len)) {
-#define ESTR "Error reading attribute value"
+					#define ESTR "Error reading attribute value"
 					if (r == -1)
 						ntfs_log_perror(ESTR);
 					else if (r < len) {
@@ -588,110 +585,19 @@ static int ntfs_readpage(struct file *file, struct page *page)
 					} else {
 						ntfs_log_debug(ESTR ": unknown error\n");
 					}
-#undef ESTR
+					#undef ESTR
 					err = -EIO;
 					goto err_out;
 				}
 			}
 			map_bh(bh, vol->sb, rl[i].lcn + iblock);
-			total += r;
 			iblock++;
 			bh = bh->b_this_page;
 			len -= r;
 			if (bh == head)
 				break;
 		}
-	} while (++i && rl[i].length && bh != head);
-#if 0
-		if (total + len >= sle64_to_cpu(a->data_size)) {
-//			unsigned char *intbuf = NULL;
-			/*
-			 * We have reached the last run so we were going to
-			 * overflow when executing the ntfs_pread() which is
-			 * BAAAAAAAD!
-			 * Temporary fix:
-			 *	Allocate a new buffer with size:
-			 *	rl[i].length << vol->cluster_size_bits, do the
-			 *	read into our buffer, then memcpy the correct
-			 *	amount of data into the caller supplied buffer,
-			 *	free our buffer, and continue.
-			 * We have reached the end of data size so we were
-			 * going to overflow in the same fashion.
-			 * Temporary fix:  same as above.
-			 */
-//			intbuf = ntfs_malloc(rl[i].length << vol->cluster_size_bits);
-//			if (!intbuf) {
-//				free(rl);
-//				return 0;
-//			}
-			/*
-			 * FIXME: If compressed file: Only read if lcn != -1.
-			 * Otherwise, we are dealing with a sparse run and we
-			 * just memset the user buffer to 0 for the length of
-			 * the run, which should be 16 (= compression unit
-			 * size).
-			 * FIXME: Really only when file is compressed, or can
-			 * we have sparse runs in uncompressed files as well?
-			 * - Yes we can, in sparse files! But not necessarily
-			 * size of 16, just run length.
-			 */
-			r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
-							min(size - total, len), addr + total);
-			if (r != min(size - total, len)) {
-#define ESTR "Error reading attribute value"
-				if (r == -1)
-					ntfs_log_perror(ESTR);
-				else if (r < len) {
-					ntfs_log_debug(ESTR ": Ran out of input data.\n");
-//					errno = EIO;
-				} else {
-					ntfs_log_debug(ESTR ": unknown error\n");
-//					errno = EIO;
-				}
-#undef ESTR
-				kfree(rl);
-//				kfree(intbuf);
-				return -EIO;
-			}
-//			memcpy(b + total, intbuf, sle64_to_cpu(a->data_size) -
-//					total);
-//			free(intbuf);
-//			total = sle64_to_cpu(a->data_size);
-			total += r;
-			break;
-		}
-		/*
-		 * FIXME: If compressed file: Only read if lcn != -1.
-		 * Otherwise, we are dealing with a sparse run and we just
-		 * memset the user buffer to 0 for the length of the run, which
-		 * should be 16 (= compression unit size).
-		 * FIXME: Really only when file is compressed, or can
-		 * we have sparse runs in uncompressed files as well?
-		 * - Yes we can, in sparse files! But not necessarily size of
-		 * 16, just run length.
-		 */
-		r = ntfs_pread(vol->sb, rl[i].lcn << vol->cluster_size_bits,
-				min(size - total, len), addr + total);
-		if (r != len) {
-#define ESTR "Error reading attribute value"
-			if (r == -1)
-				ntfs_log_perror(ESTR);
-			else if (r < len) {
-				ntfs_log_debug(ESTR ": Ran out of input data.\n");
-//				errno = EIO;
-			} else {
-				ntfs_log_debug(ESTR ": unknown error\n");
-//				errno = EIO;
-			}
-#undef ESTR
-//			kfree(rl);
-//			return -EIO;
-			err = -EIO;
-			goto done;
-		}
-	}
-#endif
-
+	} while (rl[++i].length && bh != head);
 
 done:
 	SetPageUptodate(page);
@@ -701,50 +607,6 @@ err_out:
 	kfree(rl);
 	return err;
 }
-
-#if 0
-static int ntfs_readpage(struct file *file, struct page *page)
-{
-	struct inode *vi;
-	u8 *addr;
-	ntfs_inode *ni;
-	u32 attr_len;
-	int err;
-	vi = page->mapping->host;
-	ni = EXNTFS_I(vi);
-	ntfs_attr_search_ctx *ctx;
-
-	ctx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (unlikely(!ctx)) {
-		err = -ENOMEM;
-		goto out;
-	}
-
-	err = ntfs_attr_lookup(AT_DATA, AT_UNNAMED, 0,
-			CASE_SENSITIVE, 0, NULL, 0, ctx);
-	if (unlikely(err))
-		goto out;
-
-	ntfs_log_debug("%s len=%u %d %llu type=%u, flags=%u\n", __func__, le32_to_cpu(ctx->attr->value_length), ctx->attr->non_resident, 
-				sle64_to_cpu(ctx->attr->data_size), ctx->attr->type, ctx->attr->flags);
-
-	addr = kmap_atomic(page);
-	if (ctx->attr->non_resident) {
-		ntfs_log_debug("total=%lld\n", ntfs_get_data(ni->vol, ctx->attr, addr, PAGE_SIZE));
-	} else {
-		memcpy(addr, (u8*)ctx->attr + le16_to_cpu(ctx->attr->value_offset), le32_to_cpu(ctx->attr->value_length));
-	}
-	flush_dcache_page(page);
-	kunmap_atomic(addr);
-	SetPageUptodate(page);
-	err = 0;
-out:
-	ntfs_attr_put_search_ctx(ctx);
-	unlock_page(page);
-	return err;
-//	return block_read_full_page(page, ntfs_get_block);
-}
-#endif
 
 static int ntfs_write_begin(struct file *file, struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned flags,
