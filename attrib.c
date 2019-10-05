@@ -531,7 +531,8 @@ ntfs_attr *ntfs_attr_open(ntfs_inode *ni, const ATTR_TYPES type,
 	}
 	ntfs_attr_put_search_ctx(ctx);
 out:
-	ntfs_log_error("open err %d\n", err);
+	if (err)
+		ntfs_log_error("open err %d\n", err);
 	return na ? : ERR_PTR(err);
 
 put_err_out:
