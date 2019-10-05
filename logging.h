@@ -57,16 +57,18 @@
 
 
 enum log_level {
+	LOG_ERROR,
+	LOG_PERROR,
+	LOG_WARNING,
 	LOG_DEBUG,
 	LOG_TRACE,
+	LOG_ENTER,
 	LOG_LEAVE,
 	LOG_CRITICAL,
-	LOG_ERROR,
 	LOG_INFO,
-	LOG_PERROR,
+	LOG_QUIET,
 	LOG_PROGRESS,
 	LOG_VERBOSE,
-	LOG_WARNING,
 };
 
 #define DEBUG
@@ -77,18 +79,18 @@ enum log_level {
  * but not displayed.
  */
 #ifdef DEBUG
-#define ntfs_log_debug(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_trace(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_enter(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_leave(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_critical(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_error(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_info(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_perror(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_progress(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_quiet(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_verbose(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
-#define ntfs_log_warning(FORMAT, ...) do { printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_debug(FORMAT, ...) do { if (ntfs_log_level() >= LOG_DEBUG) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_trace(FORMAT, ...) do { if (ntfs_log_level() >= LOG_TRACE) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_enter(FORMAT, ...) do { if (ntfs_log_level() >= LOG_ENTER) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_leave(FORMAT, ...) do { if (ntfs_log_level() >= LOG_LEAVE) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_critical(FORMAT, ...) do { if (ntfs_log_level() >= LOG_CRITICAL) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_error(FORMAT, ...) do { if (ntfs_log_level() >= LOG_ERROR) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_info(FORMAT, ...) do { if (ntfs_log_level() >= LOG_INFO) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_perror(FORMAT, ...) do { if (ntfs_log_level() >= LOG_PERROR) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_progress(FORMAT, ...) do { if (ntfs_log_level() >= LOG_PROGRESS)  printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_quiet(FORMAT, ...) do { if (ntfs_log_level() >= LOG_QUIET) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_verbose(FORMAT, ...) do { if (ntfs_log_level() >= LOG_VERBOSE) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
+#define ntfs_log_warning(FORMAT, ...) do { if (ntfs_log_level() >= LOG_WARNING) printk(ntfs_fmt(FORMAT), ##__VA_ARGS__);} while (0)
 #else
 #define ntfs_log_debug(FORMAT, ARGS...)do {} while (0)
 #define ntfs_log_trace(FORMAT, ARGS...)do {} while (0)

@@ -32,6 +32,13 @@
 
 static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino);
 
+static int log_level = LOG_ERROR;
+module_param(log_level, int, 0666);
+int ntfs_log_level(void)
+{
+	return log_level;
+}
+
 static struct inode *ntfs_alloc_inode(struct super_block *sb)
 {
 	ntfs_log_debug("%s\n", __func__);
