@@ -4,8 +4,6 @@
 #include <linux/fs.h>
 #include "inode.h"
 
-int ntfs_log_level(void);
-
 static inline ntfs_inode *EXNTFS_I(struct inode *inode)
 {
 	return container_of(inode, ntfs_inode, vfs_inode);

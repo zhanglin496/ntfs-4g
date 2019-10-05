@@ -22,8 +22,6 @@
 #endif
 
 #include "super.h"
-
-#include "logging.h"
 #include "layout.h"
 #include "bootsect.h"
 #include "dir.h"
@@ -33,10 +31,11 @@
 static struct inode *ntfs_iget(struct super_block *sb, unsigned long ino);
 
 static int log_level = LOG_ERROR;
-module_param(log_level, int, 0666);
+module_param(log_level, int, 0644);
+
 int ntfs_log_level(void)
 {
-	return log_level;
+	return (int)log_level;
 }
 
 static struct inode *ntfs_alloc_inode(struct super_block *sb)
