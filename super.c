@@ -433,6 +433,7 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 {
 	int i;
 	s64 len;
+	sector_t skip_block = 0;
 	sector_t lblock = 0;
 	ntfs_inode *ni = EXNTFS_I(inode);
 	runlist *rl = ni->rl;
@@ -441,9 +442,11 @@ static int ntfs_get_block(struct inode *inode, sector_t block,
 	for (i = 0; rl[i].length; i++) {
 		len = rl[i].length << vol->cluster_size_bits;
 		lblock += len >> vol->sb->s_blocksize_bits;
-		if (block >= lblock)
+		if (block >= lblock) {
+			skip_block = lblock;
 			continue;
-		map_bh(bh_result, vol->sb, rl[i].lcn + block);
+		}
+		map_bh(bh_result, vol->sb, rl[i].lcn + (block - skip_block));
 		return 0;
 	}
 	return -ERANGE;
@@ -507,7 +510,6 @@ err_out:
 
 static int ntfs_readpage(struct file *file, struct page *page)
 {
-	int i;	
 	void *addr;
 	loff_t i_size;
 	struct inode *vi;
